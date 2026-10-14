@@ -4,8 +4,12 @@ __pycache__/
 build/
 dist/
 .venv/
+.env
+.env.*
+!.env.example
 vault.bin
 vault.lock
+.server-config.json
 scripts/
 !scripts/manage-vault.ps1
 .agents
