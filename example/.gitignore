@@ -1,0 +1,9 @@
+.venv/
+.env
+.env.*
+!.env.example
+data/
+*.bin
+*.lock
+__pycache__/
+*.py[cod]

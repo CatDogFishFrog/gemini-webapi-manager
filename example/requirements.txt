@@ -1,0 +1,2 @@
+python-dotenv>=1.0.0
+gemini-webapi-manager @ git+https://github.com/CatDogFishFrog/gemini-webapi-manager.git
