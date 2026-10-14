@@ -10,6 +10,6 @@ dist/
 vault.bin
 vault.lock
 .server-config.json
-scripts/
+scripts/*
 !scripts/manage-vault.ps1
 .agents
