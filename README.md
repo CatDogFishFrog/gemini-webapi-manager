@@ -30,10 +30,57 @@ export GEMINI_MANAGER_KEY="$(gemini-webapi-manager keygen)"   # keep this safe, 
 same `GEMINI_MANAGER_KEY`. The salt lives inside the file, so nothing else is needed.
 
 | Variable | Meaning | Default |
-|---|---|---|
+| --- | --- | --- |
 | `GEMINI_MANAGER_KEY` | passphrase for the vault (required) | – |
 | `GEMINI_MANAGER_HOME` | directory with `vault.bin` | `~/.gemini-webapi-manager` |
 | `GEMINI_MANAGER_MAX_SLOTS` | number of slots | `10` |
+
+## Deployment & Docker on Server
+
+On a server, `gemini-webapi-manager` runs in headless mode inside Docker without requiring a browser or Playwright. The accounts are managed and saved into `vault.bin` on a local machine first, and then transferred to the server.
+
+### 1. `.env` configuration
+
+Create a `.env` file on the server (or alongside your app):
+
+```env
+# Encryption passphrase (must match the key used when creating vault.bin)
+GEMINI_MANAGER_KEY="your-secure-passphrase-at-least-16-chars"
+
+# Directory where vault.bin resides inside the container
+GEMINI_MANAGER_HOME="/app/data"
+```
+
+### 2. Docker Compose volume mapping
+
+`gemini-webapi-manager` needs write access to the directory with `vault.bin` because Google rotates session cookies (`__Secure-1PSIDTS`), which the manager synchronizes back into the vault. Always mount the directory as a volume rather than copying the file into the image.
+
+Directory structure on the server:
+
+```text
+my-gemini-service/
+├── .env
+├── docker-compose.yml
+└── data/
+    └── vault.bin
+```
+
+Example `docker-compose.yml`:
+
+```yaml
+version: "3.8"
+
+services:
+  app:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      # Mount host ./data directory to /app/data inside the container
+      # This keeps vault.bin accessible outside the container and writable for cookie sync
+      - ./data:/app/data:rw
+    restart: unless-stopped
+```
 
 ## Python API
 
@@ -114,7 +161,7 @@ the next call.
 
 ## Layout
 
-```
+```text
 src/gemini_webapi_manager/
   manager.py   AccountManager (public entry point)
   client.py    ManagedClient / ManagedChat (transparent wrapper, cookie + usage sync)

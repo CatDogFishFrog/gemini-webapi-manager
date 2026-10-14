@@ -6,3 +6,6 @@ dist/
 .venv/
 vault.bin
 vault.lock
+scripts/
+!scripts/manage-vault.ps1
+.agents
