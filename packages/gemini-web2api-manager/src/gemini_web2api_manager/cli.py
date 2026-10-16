@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import signal
 import sys
+import threading
 from collections.abc import Sequence
 
 from gemini_vault import selection
@@ -46,6 +48,52 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8080
+_LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+
+
+def apply_listen_settings(config: dict, cfg: GatewayConfig, args: argparse.Namespace) -> None:
+    """Куди слухати: аргументи → конфіг → типові значення.
+
+    Апстрім типово слухає ``0.0.0.0:8081`` без ключів; шлюз натомість типово слухає лише loopback.
+    """
+    if args.host:
+        config["host"] = args.host
+    elif "host" not in cfg.upstream:
+        config["host"] = DEFAULT_HOST
+    if args.port:
+        config["port"] = args.port
+    elif "port" not in cfg.upstream:
+        config["port"] = DEFAULT_PORT
+
+
+def install_shutdown_handlers(server) -> "callable":
+    """SIGTERM/SIGINT зупиняють ``serve_forever`` — тоді виконується ``finally`` (запис cookie).
+
+    Повертає функцію, що відновлює попередні обробники. Поза головним потоком нічого не робить.
+    """
+    def handler(signum, frame):  # noqa: ARG001
+        # shutdown() чекає завершення serve_forever, тож його не можна викликати з того ж потоку
+        threading.Thread(target=server.shutdown, name="gateway-shutdown", daemon=True).start()
+
+    previous = {}
+    for name in ("SIGTERM", "SIGINT"):
+        sig = getattr(signal, name, None)
+        if sig is None:
+            continue
+        try:
+            previous[sig] = signal.signal(sig, handler)
+        except ValueError:  # не головний потік
+            return lambda: None
+
+    def restore() -> None:
+        for sig, old in previous.items():
+            signal.signal(sig, old)
+
+    return restore
+
+
 def _serve(args: argparse.Namespace) -> int:
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(asctime)s %(name)s: %(message)s")
     cfg = GatewayConfig.load(args.config)
@@ -59,10 +107,7 @@ def _serve(args: argparse.Namespace) -> int:
     up = upstream.load(args.upstream_path)
     up.config.CONFIG.update(cfg.upstream)
     up.config.CONFIG.update({"cookie_file": None, "xsrf_token": None, "auth_user": None})
-    if args.host:
-        up.config.CONFIG["host"] = args.host
-    if args.port:
-        up.config.CONFIG["port"] = args.port
+    apply_listen_settings(up.config.CONFIG, cfg, args)
     if args.api_keys:
         up.config.CONFIG["api_keys"] = args.api_keys
 
@@ -103,13 +148,20 @@ def _serve(args: argparse.Namespace) -> int:
         mark = "*" if acc["current"] else " "
         state = "ok" if acc["usable"] else "UNUSABLE"
         print(f"  slot {acc['slot']}{mark} {acc['email'] or '?'} [{state}] used={acc['used_percent']}", file=sys.stderr)
+    if config["host"] not in _LOOPBACK and not config.get("api_keys"):
+        print(f"WARNING: the gateway listens on {config['host']} without api_keys: anyone who can reach it "
+              "can use your accounts. Set \"api_keys\" in the config or pass --api-key.", file=sys.stderr)
+    restore = install_shutdown_handlers(server)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopped.", file=sys.stderr)
+        pass
     finally:
+        restore()
+        print("Stopping: saving the sessions...", file=sys.stderr)
         server.server_close()
-        keeper.stop()
+        keeper.stop()  # закриває клієнтів і записує ротовані cookie у сховище
+        print("Stopped.", file=sys.stderr)
     return 0
 
 

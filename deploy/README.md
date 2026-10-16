@@ -67,9 +67,8 @@ curl -H "Authorization: Bearer sk-change-me" http://127.0.0.1:8080/_pool/status
 **Оновлення.** `git pull && docker compose up -d --build` (образ збирається з усього репозиторію; під час збірки шлюз
 завантажує код апстріму з GitHub, тож потрібен вихід в Інтернет). Сховище при цьому не чіпається.
 
-**Зупинка.** `docker compose stop` (зачекає до `stop_grace_period`). Сигнал завершення передає `init: true`.
-Шлюз завершується одразу після `SIGTERM`; cookie, ротовані після останнього циклу оновлення (до `refresh_interval`, типово
-10 хв), при цьому можуть не зберегтися, і при наступному запуску сесії оновляться.
+**Зупинка.** `docker compose stop` (зачекає до `stop_grace_period`). `init: true` передає шлюзу `SIGTERM`; він закриває сесії,
+записує ротовані cookie у сховище й завершується з кодом 0. Те саме робить `systemctl stop`.
 
 Без Docker: `gemini-gateway.service` (відредагуйте шляхи й користувача) → `sudo systemctl enable --now gemini-gateway`.
 Правила щодо ключа (`EnvironmentFile`, права `600`), теки сховища (`ReadWritePaths`) і власника ті самі.
