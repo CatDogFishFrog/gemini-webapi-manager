@@ -6,6 +6,7 @@
 from gemini_vault import (
     ENV_HOME,
     ENV_KEY,
+    ENV_KEY_FILE,
     ENV_MAX_SLOTS,
     Account,
     ClientNotStartedError,
@@ -42,7 +43,7 @@ __version__ = "0.2.0"
 
 __all__ = [
     "Account", "AccountManager", "ClientNotStartedError", "ConfigError", "DuplicateAccountError",
-    "ENV_HOME", "ENV_KEY", "ENV_MAX_SLOTS", "GeminiManagerError", "InvalidKeyError",
+    "ENV_HOME", "ENV_KEY", "ENV_KEY_FILE", "ENV_MAX_SLOTS", "GeminiManagerError", "InvalidKeyError",
     "LoginAbortedError", "LoginBlockedError", "LoginChallengeError", "LoginError", "LoginResult",
     "LoginTimeoutError", "ManagedChat", "ManagedClient", "MissingKeyError", "NoActiveAccountError",
     "RemoveResult", "SessionExpiredError", "Settings", "SlotEmptyError", "SlotError",

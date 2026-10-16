@@ -357,30 +357,74 @@ function Set-Proxy {
     Pause-Menu
 }
 
-function Manage-Key {
-    Write-Header "ГЕНЕРАЦІЯ ТА КЕРУВАННЯ КЛЮЧЕМ ШИФРУВАННЯ"
+function Invoke-Rekey {
+    # Перешифрувати vault.bin іншим ключем: акаунти лишаються, входити заново не треба.
+    param([bool]$Generate, [string]$OwnKey)
     $venvPython = Join-Path $VenvDir "Scripts\python.exe"
+    Write-Warn "Перед перешифруванням зупиніть усе, що використовує це сховище (наприклад, шлюз): зі старим ключем воно файл уже не прочитає."
+    if ($Generate) {
+        $newKey = (& $venvPython -m gemini_vault rekey --generate | Select-Object -First 1)
+        if ($LASTEXITCODE -ne 0 -or -not $newKey) { Write-Err "Перешифрування не вдалося, сховище не змінено."; return }
+        $newKey = $newKey.Trim()
+        Write-Success "Новий ключ: $newKey (збережіть його: без нього vault.bin не відкрити)"
+    } else {
+        $env:GVM_NEW_KEY = $OwnKey
+        try { & $venvPython -m gemini_vault rekey --new-key-env GVM_NEW_KEY } finally { Remove-Item Env:\GVM_NEW_KEY -ErrorAction SilentlyContinue }
+        if ($LASTEXITCODE -ne 0) { Write-Err "Перешифрування не вдалося, сховище не змінено."; return }
+        $newKey = $OwnKey
+    }
+    $save = Read-Host "Записати новий ключ у $EnvFile ? [Y/n]"
+    if ($save -notmatch '^[nNнН]') {
+        Set-EnvVariableInFile -Key "GEMINI_MANAGER_KEY" -Value $newKey
+        [System.Environment]::SetEnvironmentVariable("GEMINI_MANAGER_KEY", $newKey, "Process")
+        Write-Success "Ключ записано в .env."
+    } else {
+        Write-Warn "Ключ у .env НЕ оновлено: до зміни змінної середовища (GEMINI_MANAGER_KEY) інструменти не відкриють сховище."
+    }
+}
+
+function Manage-Key {
+    Write-Header "КЛЮЧ ШИФРУВАННЯ"
     $currentKey = [System.Environment]::GetEnvironmentVariable("GEMINI_MANAGER_KEY", "Process")
-    Write-Host "Поточний ключ у пам'яті: $currentKey" -ForegroundColor Yellow
+    $masked = if ($currentKey) { "$($currentKey.Substring(0, [Math]::Min(4, $currentKey.Length)))… (довжина $($currentKey.Length))" } else { "(не задано)" }
+    Write-Host "Поточний ключ: $masked" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "1. Згенерувати новий ключ AES-256-GCM та записати в .env"
-    Write-Host "2. Ввести власний ключ вручну"
-    Write-Host "0. Повернутися"
-    $choice = Read-Host "Вибір"
-    switch ($choice) {
-        "1" {
-            $genKey = & $venvPython -c "from gemini_webapi_manager.crypto import generate_key; print(generate_key())"
-            $genKey = $genKey.Trim()
-            Set-EnvVariableInFile -Key "GEMINI_MANAGER_KEY" -Value $genKey
-            Write-Success "Новий ключ збережено у $EnvFile : $genKey"
+    if (Test-Path $VaultFile) {
+        Write-Host "1. Перевести vault.bin на інший ключ: згенерувати новий (акаунти зберігаються)"
+        Write-Host "2. Перевести vault.bin на інший ключ: ввести власний (акаунти зберігаються)"
+        Write-Host "3. Лише записати наявний ключ у .env (vault.bin не змінюється)"
+        Write-Host "0. Повернутися"
+        $choice = Read-Host "Вибір"
+        switch ($choice) {
+            "1" { Invoke-Rekey -Generate $true -OwnKey "" }
+            "2" {
+                $manualKey = Read-Host "Введіть новий ключ (мін. 16 символів)"
+                if ($manualKey.Length -ge 16) { Invoke-Rekey -Generate $false -OwnKey $manualKey }
+                else { Write-Err "Ключ занадто короткий. Потрібно мінімум 16 символів." }
+            }
+            "3" {
+                $manualKey = Read-Host "Введіть ключ, яким зашифровано vault.bin"
+                if ($manualKey.Length -ge 16) { Set-EnvVariableInFile -Key "GEMINI_MANAGER_KEY" -Value $manualKey; Write-Success "Ключ збережено у $EnvFile" }
+                else { Write-Err "Ключ занадто короткий. Потрібно мінімум 16 символів." }
+            }
         }
-        "2" {
-            $manualKey = Read-Host "Введіть новий ключ (мін. 16 символів)"
-            if ($manualKey.Length -ge 16) {
-                Set-EnvVariableInFile -Key "GEMINI_MANAGER_KEY" -Value $manualKey
-                Write-Success "Ключ збережено у $EnvFile"
-            } else {
-                Write-Err "Ключ занадто короткий. Потрібно мінімум 16 символів."
+    } else {
+        $venvPython = Join-Path $VenvDir "Scripts\python.exe"
+        Write-Host "Сховища ще немає: ключ можна вільно замінити."
+        Write-Host "1. Згенерувати новий ключ і записати в .env"
+        Write-Host "2. Ввести власний ключ"
+        Write-Host "0. Повернутися"
+        $choice = Read-Host "Вибір"
+        switch ($choice) {
+            "1" {
+                $genKey = (& $venvPython -m gemini_vault keygen 2>$null | Select-Object -First 1).Trim()
+                Set-EnvVariableInFile -Key "GEMINI_MANAGER_KEY" -Value $genKey
+                Write-Success "Новий ключ збережено у $EnvFile : $genKey"
+            }
+            "2" {
+                $manualKey = Read-Host "Введіть ключ (мін. 16 символів)"
+                if ($manualKey.Length -ge 16) { Set-EnvVariableInFile -Key "GEMINI_MANAGER_KEY" -Value $manualKey; Write-Success "Ключ збережено у $EnvFile" }
+                else { Write-Err "Ключ занадто короткий. Потрібно мінімум 16 символів." }
             }
         }
     }
@@ -498,7 +542,7 @@ while ($true) {
     Write-Host "4. Перевірити ліміти використання (Usage)"
     Write-Host "5. Видалити акаунт зі слота (Remove)"
     Write-Host "6. Налаштувати проксі для слота (Proxy)"
-    Write-Host "7. Згенерувати або змінити ключ шифрування (.env)"
+    Write-Host "7. Ключ шифрування (змінити, перевести vault.bin на інший ключ)"
     Write-Host "8. Перекинути vault.bin на сервер (SSH / SCP)"
     Write-Host "9. Відкрити теку сховища у Провіднику"
     Write-Host "10. Оновити пакет gemini-webapi-manager"

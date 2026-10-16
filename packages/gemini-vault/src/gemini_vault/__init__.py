@@ -1,7 +1,7 @@
 """gemini-vault: ядро — зашифроване сховище акаунтів Google/Gemini, слоти, вхід (вікно або
 лише термінал), сесії через gemini-webapi та політика вибору акаунта за лімітами."""
 
-from .config import ENV_HOME, ENV_KEY, ENV_MAX_SLOTS, Settings
+from .config import ENV_HOME, ENV_KEY, ENV_KEY_FILE, ENV_MAX_SLOTS, Settings
 from .crypto import generate_key
 from .errors import (
     ClientNotStartedError,
@@ -33,7 +33,7 @@ __version__ = "0.2.0"
 
 __all__ = [
     "Account", "AccountRegistry", "ClientNotStartedError", "ConfigError", "DuplicateAccountError",
-    "ENV_HOME", "ENV_KEY", "ENV_MAX_SLOTS", "GeminiManagerError", "InvalidKeyError",
+    "ENV_HOME", "ENV_KEY", "ENV_KEY_FILE", "ENV_MAX_SLOTS", "GeminiManagerError", "InvalidKeyError",
     "LoginAbortedError", "LoginBlockedError", "LoginChallengeError", "LoginError", "LoginResult",
     "LoginTimeoutError", "ManagedChat", "ManagedClient", "MissingKeyError", "NoActiveAccountError",
     "RemoveResult", "SessionExpiredError", "Settings", "SlotEmptyError", "SlotError",

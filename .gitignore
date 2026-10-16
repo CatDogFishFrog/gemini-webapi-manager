@@ -16,6 +16,7 @@ dist/
 *.bin
 vault/
 vault.lock
+vault.bin.bak.*
 .server-config.json
 gateway.config.json
 gemini-login-debug/

@@ -8,20 +8,22 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import getpass
 import os
 import subprocess
 import sys
 from collections.abc import Sequence
 
+from .config import ENV_KEY, ENV_KEY_FILE, read_key_file
 from .crypto import generate_key
-from .errors import GeminiManagerError
+from .errors import ConfigError, GeminiManagerError
 from .models import Account
 from .registry import AccountRegistry
 from .sessions import usage_refresh_contract
 
 COMMON_COMMANDS = {
     "keygen", "install-browser", "login", "login-console", "list", "use", "remove", "usage", "proxy",
-    "doctor",
+    "rekey", "doctor",
 }
 
 
@@ -107,6 +109,14 @@ def build_parser(prog: str, description: str) -> argparse.ArgumentParser:
     proxy.add_argument("slot", type=int)
     proxy.add_argument("url", nargs="?", help="omit to clear")
 
+    rk = sub.add_parser("rekey", help="re-encrypt vault.bin with another key (accounts are kept)")
+    source = rk.add_mutually_exclusive_group()
+    source.add_argument("--generate", action="store_true",
+                        help="generate a new key and print it to stdout (nothing else goes to stdout)")
+    source.add_argument("--new-key-env", metavar="VAR", help="read the new key from this environment variable")
+    source.add_argument("--new-key-file", metavar="FILE", help="read the new key from a file")
+    rk.add_argument("--no-backup", action="store_true", help="do not keep a copy of the old vault.bin")
+
     sub.add_parser("doctor", help="check the environment (python deps, browser, gemini-webapi contract)")
     return parser
 
@@ -170,6 +180,40 @@ async def _cmd_remove(registry: AccountRegistry, args: argparse.Namespace) -> in
     return 0
 
 
+def _new_key(args: argparse.Namespace) -> tuple[str, bool]:
+    """Новий ключ для ``rekey``: ніколи з аргументів командного рядка (їх видно в ``ps``)."""
+    if args.generate:
+        return generate_key(), True
+    if args.new_key_env:
+        value = os.environ.get(args.new_key_env)
+        if not value:
+            raise ConfigError(f"Environment variable {args.new_key_env} is empty or not set.")
+        return value, False
+    if args.new_key_file:
+        return read_key_file(args.new_key_file), False
+    if not sys.stdin.isatty():
+        raise ConfigError(
+            "Give the new key with --generate, --new-key-env or --new-key-file (there is no terminal to ask)."
+        )
+    first = getpass.getpass("New encryption key (input hidden): ")
+    if getpass.getpass("Repeat the new key: ") != first:
+        raise ConfigError("The two keys do not match.")
+    return first, False
+
+
+def _cmd_rekey(registry: AccountRegistry, args: argparse.Namespace) -> int:
+    new_key, generated = _new_key(args)
+    status_line("Stop everything that uses this vault first (e.g. the gateway): after re-encryption it cannot read the file with the old key.")
+    backup = registry.rekey(new_key, backup=not args.no_backup)
+    if generated:
+        print(new_key)  # єдиний вивід у stdout: його підхоплюють скрипти
+    status_line("Vault re-encrypted; the accounts were kept.")
+    if backup is not None:
+        status_line(f"Backup of the old file (opens with the OLD key): {backup}")
+    status_line(f"Now set {ENV_KEY} (or the content of {ENV_KEY_FILE}) to the new key before starting anything that uses the vault.")
+    return 0
+
+
 def _cmd_doctor() -> int:
     import importlib.util
     import os
@@ -186,7 +230,13 @@ def _cmd_doctor() -> int:
         (p for p in (shutil.which(n) for n in ("google-chrome", "chromium", "chromium-browser", "microsoft-edge")) if p), None
     )
     print(f"system browser: {browser or 'none found (use `install-browser --with-deps` or set ' + ENV_BROWSER_PATH + ')'}")
-    print(f"GEMINI_MANAGER_KEY: {'set' if os.environ.get('GEMINI_MANAGER_KEY') else 'NOT set'}")
+    if os.environ.get(ENV_KEY):
+        key_state = "set"
+    elif os.environ.get(ENV_KEY_FILE):
+        key_state = f"read from the file in {ENV_KEY_FILE}"
+    else:
+        key_state = "NOT set"
+    print(f"{ENV_KEY}: {key_state}")
     return 0 if ok else 1
 
 
@@ -222,6 +272,8 @@ def dispatch(args: argparse.Namespace) -> int | None:
         registry.set_proxy(args.slot, args.url)
         print(f"Slot {args.slot}: proxy {'set' if args.url else 'cleared'}.")
         return 0
+    if args.command == "rekey":
+        return _cmd_rekey(registry, args)
     if args.command == "usage":
         return asyncio.run(_cmd_usage(registry, args))
     return 2  # pragma: no cover

@@ -188,6 +188,17 @@ class AccountRegistry:
             if stored is not None:
                 stored.last_limit_hit_at = utcnow_iso()
 
+    def rekey(self, new_key: str, *, backup: bool = True) -> Path | None:
+        """Перевести сховище на інший ключ шифрування (акаунти входити заново не потрібно).
+
+        Повертає шлях до резервної копії старого файла. Процеси, що тримають старий ключ
+        (наприклад, працюючий шлюз), після цього не зможуть розшифрувати файл: їх треба
+        зупинити до перешифрування й запустити з новим ключем.
+        """
+        backup_path = self._store.rekey(new_key, backup=backup)
+        self._settings = self._store.settings
+        return backup_path
+
     # ------------------------------------------------------------------ вхід
     async def login(
         self,

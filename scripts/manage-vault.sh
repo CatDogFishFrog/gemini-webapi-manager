@@ -184,20 +184,53 @@ act_remove() {
 }
 act_proxy()  { header "ПРОКСІ ДЛЯ СЛОТА"; cli list; echo; local s u; s="$(ask "Номер слота: ")"; [ -n "$s" ] || return; u="$(ask "URL проксі (Enter — прибрати): ")"; if [ -n "$u" ]; then cli proxy "$s" "$u"; else cli proxy "$s"; fi; }
 
+gateway_running() { pgrep -f "gemini[-_]web2api[-_]manager.* serve" >/dev/null 2>&1; }
+
+rekey_vault() {   # rekey_vault generate | own — перевести vault.bin на інший ключ
+    if gateway_running; then
+        warn "Схоже, шлюз запущено. Зі старим ключем він не зможе читати перешифроване сховище і перестане зберігати cookie."
+        warn "Зупиніть його (а для контейнера — docker compose stop) і повторіть."
+        confirm "Все одно продовжити?" || return
+    fi
+    local new_key=""
+    if [ "$1" = "generate" ]; then
+        new_key="$(cli rekey --generate)" || { err "Перешифрування не вдалося, сховище не змінено."; return 1; }
+        ok "Новий ключ: $new_key"
+        dim "Збережіть його: без нього vault.bin не відкрити."
+    else
+        local k; read -r -s -p "Новий ключ (мін. 16 символів): " k; printf '\n'
+        [ -n "$k" ] || { err "Порожній ключ."; return 1; }
+        GVM_NEW_KEY="$k" cli rekey --new-key-env GVM_NEW_KEY || { err "Перешифрування не вдалося, сховище не змінено."; return 1; }
+        new_key="$k"
+    fi
+    local reply; read -r -p "Записати новий ключ у $ENV_FILE? [Y/n] " reply
+    if [[ "$reply" =~ ^[NnНн]$ ]]; then
+        warn "Ключ у .env НЕ оновлено: інструменти не відкриють сховище, доки GEMINI_MANAGER_KEY не зміниться."
+    else
+        set_env_var GEMINI_MANAGER_KEY "$new_key"; load_env; ok "Ключ записано в $ENV_FILE (права 600)."
+    fi
+}
+
 act_key() {
     header "КЛЮЧ ШИФРУВАННЯ"
     local masked="(не задано)"
     [ -n "${GEMINI_MANAGER_KEY:-}" ] && masked="${GEMINI_MANAGER_KEY:0:4}…${GEMINI_MANAGER_KEY: -4} (довжина ${#GEMINI_MANAGER_KEY})"
     echo "Поточний ключ: $masked"
     echo "1. Показати ключ повністю"
-    echo "2. Вставити наявний ключ (наприклад, той самий, що на Windows)"
-    echo "3. Згенерувати новий (лише якщо vault.bin ще немає)"
+    echo "2. Вказати ключ, яким зашифровано vault.bin (наприклад, той самий, що на Windows) — записати в .env"
+    if [ -f "$VAULT_FILE" ]; then
+        echo "3. Перевести vault.bin на інший ключ: згенерувати новий (акаунти зберігаються)"
+        echo "4. Перевести vault.bin на інший ключ: ввести власний (акаунти зберігаються)"
+    else
+        echo "3. Згенерувати новий ключ (vault.bin ще немає)"
+    fi
     echo "0. Назад"
     case "$(ask "Вибір: ")" in
         1) printf '%s\n' "${GEMINI_MANAGER_KEY:-}";;
         2) local k; read -r -s -p "Ключ: " k; printf '\n'; [ -n "$k" ] && { set_env_var GEMINI_MANAGER_KEY "$k"; load_env; ok "Збережено."; };;
-        3) if [ -f "$VAULT_FILE" ]; then err "vault.bin уже існує: новий ключ зробить його нечитним. Спершу видаліть/перенесіть файл."
+        3) if [ -f "$VAULT_FILE" ]; then rekey_vault generate
            else set_env_var GEMINI_MANAGER_KEY "$("$(venv_python)" -m gemini_vault keygen 2>/dev/null)"; load_env; ok "Новий ключ збережено."; fi;;
+        4) [ -f "$VAULT_FILE" ] && rekey_vault own;;
     esac
 }
 

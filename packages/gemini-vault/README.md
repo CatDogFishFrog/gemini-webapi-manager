@@ -29,7 +29,8 @@ Python 3.11+. Залежності: `gemini-webapi>=2.1.1,<3`, `cryptography`, `
 
 | Змінна | Призначення | Типово |
 | --- | --- | --- |
-| `GEMINI_MANAGER_KEY` | ключ шифрування (обов'язковий) | — |
+| `GEMINI_MANAGER_KEY` | ключ шифрування | — |
+| `GEMINI_MANAGER_KEY_FILE` | шлях до файла з ключем (Docker/Kubernetes secret, наприклад `/run/secrets/gemini_key`); кінцеві переводи рядка відкидаються. Використовується, лише якщо `GEMINI_MANAGER_KEY` не задано | — |
 | `GEMINI_MANAGER_HOME` | тека зі `vault.bin` | `~/.gemini-webapi-manager` |
 | `GEMINI_MANAGER_MAX_SLOTS` | кількість слотів | `10` |
 | `GEMINI_VAULT_BROWSER_PATH` | шлях до Chromium/Chrome для входу | пошук системного браузера |
@@ -53,6 +54,8 @@ gemini-vault usage [SLOT] [--json]               # оновити ліміти �
 gemini-vault use 2                               # зробити слот активним
 gemini-vault proxy 1 http://user:pass@host:3128  # проксі слота; без URL — прибрати
 gemini-vault remove 1 [-y] [--revoke]            # видалити; --revoke ще й виходить з акаунта на боці Google
+gemini-vault rekey --generate                    # перешифрувати vault.bin новим ключем (друкує його в stdout)
+gemini-vault rekey --new-key-env VAR|--new-key-file FILE   # власний новий ключ; без параметрів — запит у терміналі
 gemini-vault install-browser [--with-deps]       # Chromium від Playwright
 gemini-vault doctor                              # перевірка середовища
 ```
@@ -61,6 +64,10 @@ gemini-vault doctor                              # перевірка серед
 
 `login` і `login-console` приймають: `--email`, `--proxy`, `--timeout`, `--browser {auto,chrome,msedge,chromium}`,
 `--browser-path`, `--headless` (режим вікна), `--headed` (режим консолі), `--no-verify`, `--replace`, `--debug-dir`.
+`rekey` змінює ключ шифрування **без повторного входу в акаунти**: сховище розшифровується старим ключем, шифрується новим
+(нова сіль), перевіряється й атомарно підміняє файл; поруч лишається копія `vault.bin.bak.<час>` (відкривається старим ключем;
+`--no-backup` вимикає). Новий ключ ніколи не береться з аргументів командного рядка. Усі процеси, що тримають старий ключ
+(зокрема шлюз), перед цим треба зупинити, а потім запустити з новим ключем. З Python: `AccountRegistry.rekey(new_key)`.
 `remove` без `-y` питає підтвердження і відмовляється працювати в неінтерактивній сесії.
 Звичайний `remove` лише забуває сесію локально; `--revoke` додатково просить Google завершити її й перевіряє, що cookie
 більше не приймаються (результат: «підтверджено» / «запит прийнято, але не підтверджено» / «Google недосяжний»).
@@ -143,7 +150,7 @@ async with reg.client(1) as client:           # ManagedClient: повний API 
 
 | Виняток | Коли | Що робити |
 | --- | --- | --- |
-| `MissingKeyError`, `WeakKeyError`, `ConfigError` | ключ не задано / коротший за 16 символів / хибна конфігурація | задайте `GEMINI_MANAGER_KEY` (`gemini-vault keygen`) |
+| `MissingKeyError`, `WeakKeyError`, `ConfigError` | ключ не задано / коротший за 16 символів / хибна конфігурація (зокрема нечитабельний файл ключа, `rekey` без сховища чи з тим самим ключем) | задайте `GEMINI_MANAGER_KEY` або `GEMINI_MANAGER_KEY_FILE` (`gemini-vault keygen`) |
 | `InvalidKeyError` | файл не розшифровується: хибний ключ або файл змінено | використайте ключ, яким створено файл |
 | `VaultCorruptedError` | файл не схожий на сховище або має невідому версію | відновіть із резервної копії |
 | `SlotError`, `SlotOccupiedError`, `SlotEmptyError` | хибний номер слота / слот зайнятий / слот порожній | `remove`, `--replace` або інший слот |

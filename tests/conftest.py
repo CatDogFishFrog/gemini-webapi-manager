@@ -73,7 +73,7 @@ class FakeGemini:
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
-    for name in ("GEMINI_COOKIE_PATH", "GEMINI_MANAGER_KEY", "GEMINI_MANAGER_HOME",
+    for name in ("GEMINI_COOKIE_PATH", "GEMINI_MANAGER_KEY", "GEMINI_MANAGER_KEY_FILE", "GEMINI_MANAGER_HOME",
                  "GEMINI_MANAGER_MAX_SLOTS"):
         monkeypatch.delenv(name, raising=False)
 
