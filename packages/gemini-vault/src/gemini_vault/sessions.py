@@ -1,5 +1,6 @@
-"""ManagedClient: a thin, transparent wrapper over ``gemini_webapi.GeminiClient``.
+"""Sessions: everything that talks to Gemini through ``gemini-webapi`` on behalf of a vault slot.
 
+``ManagedClient`` is a thin, transparent wrapper over ``gemini_webapi.GeminiClient``.
 Everything not overridden here is forwarded to the underlying client, so new
 gemini-webapi features work without changes. The wrapper adds:
 
@@ -7,6 +8,9 @@ gemini-webapi features work without changes. The wrapper adds:
 * rotated cookies written back (encrypted) so sessions stay alive,
 * a fresh usage snapshot after init and on demand,
 * bookkeeping (last use, usage-limit hits) and transparent recovery after a limit error.
+
+Besides the client this module has the small helpers shared by every front-end
+(:func:`verify_session`, :func:`revoke_session`, :func:`usage_refresh_contract`).
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import AsyncIterator, Callable, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from gemini_webapi import AuthError, GeminiClient, UsageLimitExceededError
@@ -22,6 +27,7 @@ from . import cache
 from .errors import (
     ClientNotStartedError,
     GeminiManagerError,
+    LoginError,
     SessionExpiredError,
     SlotEmptyError,
 )
@@ -36,6 +42,8 @@ PSIDTS = "__Secure-1PSIDTS"
 
 _COOKIE_SYNC_INTERVAL = 300.0
 _TOUCH_INTERVAL = 30.0
+
+LOGOUT_URL = "https://accounts.google.com/Logout?continue=https%3A%2F%2Fgemini.google.com%2F"
 
 
 def cookies_to_dict(cookies: Any) -> dict[str, str]:
@@ -73,8 +81,84 @@ def build_gemini_client(cookies: Mapping[str, str], proxy: str | None = None) ->
     return client
 
 
+# ---------------------------------------------------------------------- shared helpers
+@dataclass(frozen=True)
+class VerifiedSession:
+    """Result of :func:`verify_session`: refreshed cookies plus what Gemini told us."""
+
+    cookies: dict[str, str]
+    snapshot: UsageSnapshot | None
+    status: str | None
+
+
+async def verify_session(
+    cookies: Mapping[str, str], proxy: str | None = None, *, timeout: float = 60.0
+) -> VerifiedSession:
+    """Try the cookies against Gemini. Raises :class:`LoginError` if they are not accepted."""
+    merged = dict(cookies)
+    with cache.sandbox():
+        client = build_gemini_client(merged, proxy)
+        try:
+            await client.init(auto_refresh=False, timeout=timeout)
+            snapshot = snapshot_from_client(client)
+            status = status_name(client)
+        except AuthError as exc:
+            raise LoginError("Google did not accept the captured session.") from exc
+        except GeminiManagerError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - surface any init failure as login failure
+            raise LoginError(f"Could not verify the session: {exc}") from exc
+        finally:
+            await client.close()
+        merged.update(cookies_to_dict(client.cookies))
+    if status == "UNAUTHENTICATED":
+        raise LoginError("Google reports the captured session as unauthenticated.")
+    return VerifiedSession(cookies=merged, snapshot=snapshot, status=status)
+
+
+async def session_is_valid(cookies: Mapping[str, str], proxy: str | None = None) -> bool:
+    """True if Gemini still accepts the cookies (used to confirm a remote sign-out)."""
+    try:
+        await verify_session(cookies, proxy, timeout=30.0)
+    except LoginError:
+        return False  # rejected; any other failure (network...) propagates as "unknown"
+    return True
+
+
+async def revoke_session(
+    cookies: Mapping[str, str], proxy: str | None = None, *, timeout: float = 30.0
+) -> bool:
+    """Best-effort sign-out of this session on Google's side.
+
+    Sends the stored cookies to Google's logout endpoint. Returns True if the request was
+    accepted (HTTP 2xx/3xx). It cannot prove the session is dead: call
+    :func:`session_is_valid` afterwards for that.
+    """
+    from curl_cffi.requests import AsyncSession  # dependency of gemini-webapi
+
+    async with AsyncSession(impersonate="chrome", proxy=proxy, timeout=timeout) as http:
+        for name, value in cookies.items():
+            http.cookies.set(name, value, domain=".google.com")
+        response = await http.get(LOGOUT_URL, allow_redirects=True)
+        return 200 <= int(response.status_code) < 400
+
+
+_PRIVATE_USAGE_METHODS = ("_fetch_usage_info", "_fetch_quota")
+
+
+def usage_refresh_contract() -> tuple[bool, list[str]]:
+    """Check that the private gemini-webapi methods used for the cheap usage refresh exist.
+
+    Returns ``(ok, missing)``. When not ok, :meth:`ManagedClient.refresh_usage` still works
+    through the (slower) public re-init path; a contract test in CI fails loudly so the
+    dependency range gets revisited.
+    """
+    missing = [n for n in _PRIVATE_USAGE_METHODS if not callable(getattr(GeminiClient, n, None))]
+    return (not missing, missing)
+
+
 class ManagedClient:
-    """Use as ``async with manager.client() as client`` or call ``start()`` / ``close()``."""
+    """Use as ``async with registry.client() as client`` or call ``start()`` / ``close()``."""
 
     def __init__(
         self,
@@ -221,6 +305,16 @@ class ManagedClient:
         except (OSError, GeminiManagerError) as exc:
             log.warning("Could not update vault for slot %s: %s", self._slot, exc)
 
+    def sync_cookies(self) -> None:
+        """Write the current (possibly rotated) cookies back into the vault right now."""
+        if self._client is not None:
+            self._persist(cookies=True)
+            self._last_sync = time.monotonic()
+
+    def mark_limit_hit(self) -> None:
+        """Record a usage-limit hit that was detected outside this wrapper (e.g. by a gateway)."""
+        self._persist(limit_hit=True)
+
     def _after_request(self) -> None:
         now = time.monotonic()
         sync = now - self._last_sync >= _COOKIE_SYNC_INTERVAL
@@ -287,8 +381,9 @@ class ManagedClient:
         """Fetch current limits from Gemini and store them. Returns the new snapshot."""
         await self._ensure_ready()
         raw = self.raw
-        # Cheap path: re-run just the two usage RPCs. These are private in gemini-webapi,
-        # so fall back to a full re-init (public API only) if they vanish or fail.
+        # Cheap path: re-run just the two usage RPCs. These are private in gemini-webapi
+        # (see usage_refresh_contract()), so fall back to a full re-init (public API only)
+        # if they vanish or fail.
         fetch_usage = getattr(raw, "_fetch_usage_info", None)
         fetch_quota = getattr(raw, "_fetch_quota", None)
         refreshed = False

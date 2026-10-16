@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gemini-web2api-manager"
+version = "0.1.0"
+description = "OpenAI-compatible Gemini gateway (gemini-web2api) with a multi-account pool and automatic failover when an account hits its limit."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "gemini-vault>=0.2.0,<0.3",
+    "httpx>=0.25",  # справжній стрімінг в апстрімі
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "gemini-vault[dev]"]
+
+[project.scripts]
+gemini-web2api-manager = "gemini_web2api_manager.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+gemini_web2api_manager = ["py.typed"]

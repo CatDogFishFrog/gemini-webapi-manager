@@ -108,25 +108,33 @@ function Set-EnvVariableInFile {
 function Install-ManagerPackage {
     param([string]$PythonExe)
 
+    # Монорепозиторій: ядро gemini-vault (+ extra [login] для входу через браузер) і пакет gemini-webapi-manager.
+    # Шлюз gemini-web2api-manager на Windows зазвичай не потрібен — він ставиться на сервері (scripts/manage-vault.sh).
     if (Test-Path $RepoDir) {
-        Write-Host "Встановлення пакету з локальної теки '$RepoDir' в режимі розробки (-e)..." -ForegroundColor Cyan
-        & $PythonExe -m pip install -e "$RepoDir"
+        Write-Host "Встановлення пакетів з локальної теки '$RepoDir' в режимі розробки (-e)..." -ForegroundColor Cyan
+        $core = Join-Path $RepoDir "packages\gemini-vault"
+        $api  = Join-Path $RepoDir "packages\gemini-webapi-manager"
+        if (-not (Test-Path $core)) {
+            Write-Warn "У '$RepoDir' немає packages\gemini-vault: це стара структура репозиторію. Оновіть клон (git pull)."
+            return
+        }
+        & $PythonExe -m pip install -e "$core[login]" -e "$api"
     } else {
-        Write-Host "Локальну теку не знайдено. Встановлення пакету напряму з GitHub..." -ForegroundColor Cyan
+        Write-Host "Локальну теку не знайдено. Встановлення пакетів напряму з GitHub..." -ForegroundColor Cyan
         Write-Host "Джерело: $GithubRepoUrl" -ForegroundColor DarkGray
         $gitCmd = Get-Command "git" -ErrorAction SilentlyContinue
         if ($gitCmd) {
             Write-Host "Використовується Git..." -ForegroundColor DarkGray
-            & $PythonExe -m pip install --upgrade "git+$GithubRepoUrl.git"
+            & $PythonExe -m pip install --upgrade "gemini-vault[login] @ git+$GithubRepoUrl.git#subdirectory=packages/gemini-vault" "gemini-webapi-manager @ git+$GithubRepoUrl.git#subdirectory=packages/gemini-webapi-manager"
         } else {
-            Write-Host "Git не знайдено у PATH. Встановлення через zip-архів репозиторію..." -ForegroundColor DarkGray
-            & $PythonExe -m pip install --upgrade "$GithubRepoUrl/archive/refs/heads/main.zip"
+            Write-Err "Git не знайдено у PATH: монорепозиторій з підпапками неможливо поставити з zip-архіву. Встановіть Git або склонуйте репозиторій у '$RepoDir'."
+            return
         }
     }
 }
 
 function Update-Package {
-    Write-Header "ОНОВЛЕННЯ ПАКЕТУ GEMINI-WEBAPI-MANAGER"
+    Write-Header "ОНОВЛЕННЯ ПАКЕТІВ GEMINI-VAULT / GEMINI-WEBAPI-MANAGER"
     $venvPython = Join-Path $VenvDir "Scripts\python.exe"
     Install-ManagerPackage -PythonExe $venvPython
     if ($LASTEXITCODE -eq 0) {
@@ -320,7 +328,10 @@ function Remove-Account {
     Write-Host ""
     $slotStr = Read-Host "Введіть номер слота для видалення"
     if ([int]::TryParse($slotStr, [ref]$null)) {
-        Invoke-ManagerCli @("remove", [int]$slotStr)
+        $revoke = Read-Host "Також вийти з акаунта на стороні Google (інакше сесія лишиться дійсною)? [y/N]"
+        $rmArgs = @("remove", [int]$slotStr)
+        if ($revoke -eq "y" -or $revoke -eq "Y") { $rmArgs += "--revoke" }
+        Invoke-ManagerCli $rmArgs
     } else {
         Write-Err "Невірний номер слота."
     }

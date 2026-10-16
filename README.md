@@ -1,173 +1,111 @@
-# gemini-webapi-manager
+# Gemini accounts
 
-Companion for [`gemini-webapi`](https://github.com/HanaokaYuzu/Gemini-API): sign in to a Google
-account through a browser window, keep the session in an **encrypted vault**, hold several
-accounts in numbered **slots**, switch the **active** one, see usage, and call `gemini-webapi`
-through the active account. It wraps the library instead of replacing it: every method it does
-not override is forwarded to `gemini_webapi.GeminiClient`, so library updates keep working.
+Інструменти навколо неофіційного веб-клієнта Gemini: кілька акаунтів Google в одному зашифрованому сховищі,
+вхід без ручного копіювання cookie, облік лімітів і OpenAI-сумісний шлюз, що сам переходить на інший акаунт,
+коли в поточного закінчується ліміт.
 
-No more copying `__Secure-1PSID` / `__Secure-1PSIDTS` by hand.
+| Пакет | Що це |
+| --- | --- |
+| [`gemini-vault`](packages/gemini-vault) | **Ядро.** Зашифроване сховище `vault.bin`, слоти, вхід у Google (у вікні браузера або лише з терміналу), сесії, ліміти, політика вибору акаунта, CLI `gemini-vault` |
+| [`gemini-webapi-manager`](packages/gemini-webapi-manager) | Python-API `AccountManager` для [gemini-webapi](https://github.com/HanaokaYuzu/Gemini-API): активний акаунт, `generate_content`, чати, ліміти |
+| [`gemini-web2api-manager`](packages/gemini-web2api-manager) | OpenAI-сумісний шлюз на базі [gemini-web2api](https://github.com/Sophomoresty/gemini-web2api) з пулом акаунтів і автоперемиканням |
 
-## Install
+## Можливості
+
+- **Кілька акаунтів у одному файлі.** Слоти `1…N`, активний акаунт, окреме проксі для кожного слота. Файл шифрується
+  (AES-256-GCM, ключ виводиться через scrypt) і однаково відкривається на будь-якій машині за тим самим ключем.
+- **Вхід двома способами.** У вікні браузера або повністю з терміналу — для серверів без графічної оболонки: пароль,
+  вибір методу підтвердження, код з Authenticator/SMS, підтвердження на телефоні.
+- **Ліміти.** Залишок 5-годинного та тижневого вікон і квоти моделей (`pro`/`flash`) для кожного акаунта.
+- **Автоперемикання.** Шлюз тримається поточного акаунта, а коли ліміт вичерпано, повторює той самий запит на акаунті
+  з найбільшим залишком; клієнт цього не помічає.
+- **Сервер.** Скрипти керування для Windows і Linux, образ Docker, unit для systemd — див. [`deploy/`](deploy).
+
+## Встановлення
+
+Корінь репозиторію не є Python-пакетом: кожен пакет ставиться зі своєї підтеки.
 
 ```bash
-pip install .            # or: pip install -e .[dev]
-gemini-webapi-manager install-browser   # only if you have no Chrome/Edge installed
+REPO=https://github.com/CatDogFishFrog/gemini-webapi-manager.git
+pip install "gemini-vault[login] @ git+$REPO#subdirectory=packages/gemini-vault"
+pip install "gemini-webapi-manager @ git+$REPO#subdirectory=packages/gemini-webapi-manager"
+pip install "gemini-web2api-manager @ git+$REPO#subdirectory=packages/gemini-web2api-manager"
 ```
 
-Python 3.11+. Login uses your installed Chrome/Edge when present, otherwise Playwright's Chromium.
+`[login]` додає Playwright — він потрібен лише там, де відбувається вхід. Серверу з готовим `vault.bin` він не потрібен.
+Вимоги: Python 3.11+.
 
-## Encryption key
+Імпорти `gemini_webapi_manager.*`, що існували до розділення на пакети (`crypto`, `config`, `client`, `login` тощо), працюють
+як і раніше; формат `vault.bin` не змінювався. Деталі — у [CHANGELOG](CHANGELOG.md).
 
-Everything is stored in one file, `vault.bin` (AES-256-GCM, key derived with scrypt), inside
-`~/.gemini-webapi-manager` (override with `GEMINI_MANAGER_HOME`).
+## Швидкий старт
+
+**Сервер без графічної оболонки (Linux):**
 
 ```bash
-export GEMINI_MANAGER_KEY="$(gemini-webapi-manager keygen)"   # keep this safe, min. 16 chars
+git clone https://github.com/CatDogFishFrog/gemini-webapi-manager.git && cd gemini-webapi-manager
+./scripts/manage-vault.sh        # створить venv, поставить пакети, згенерує ключ, покаже меню
 ```
 
-**Moving sessions to another machine:** copy `vault.bin` into that machine's home dir and set the
-same `GEMINI_MANAGER_KEY`. The salt lives inside the file, so nothing else is needed.
+**Windows (вхід у вікні браузера):** `scripts\manage-vault.ps1` у PowerShell 7 — меню, інструкції та відправлення
+`vault.bin` на сервер.
 
-| Variable | Meaning | Default |
-| --- | --- | --- |
-| `GEMINI_MANAGER_KEY` | passphrase for the vault (required) | – |
-| `GEMINI_MANAGER_HOME` | directory with `vault.bin` | `~/.gemini-webapi-manager` |
-| `GEMINI_MANAGER_MAX_SLOTS` | number of slots | `10` |
+**З командного рядка:**
 
-## Deployment & Docker on Server
-
-On a server, `gemini-webapi-manager` runs in headless mode inside Docker without requiring a browser or Playwright. The accounts are managed and saved into `vault.bin` on a local machine first, and then transferred to the server.
-
-### 1. `.env` configuration
-
-Create a `.env` file on the server (or alongside your app):
-
-```env
-# Encryption passphrase (must match the key used when creating vault.bin)
-GEMINI_MANAGER_KEY="your-secure-passphrase-at-least-16-chars"
-
-# Directory where vault.bin resides inside the container
-GEMINI_MANAGER_HOME="/app/data"
+```bash
+export GEMINI_MANAGER_KEY="$(gemini-vault keygen)"      # збережіть ключ: без нього vault.bin не відкрити
+gemini-vault login-console 1 --email me@gmail.com       # або: gemini-vault login 1
+gemini-vault list
+gemini-vault usage
 ```
 
-### 2. Docker Compose volume mapping
-
-`gemini-webapi-manager` needs write access to the directory with `vault.bin` because Google rotates session cookies (`__Secure-1PSIDTS`), which the manager synchronizes back into the vault. Always mount the directory as a volume rather than copying the file into the image.
-
-Directory structure on the server:
-
-```text
-my-gemini-service/
-├── .env
-├── docker-compose.yml
-└── data/
-    └── vault.bin
-```
-
-Example `docker-compose.yml`:
-
-```yaml
-version: "3.8"
-
-services:
-  app:
-    build: .
-    env_file:
-      - .env
-    volumes:
-      # Mount host ./data directory to /app/data inside the container
-      # This keeps vault.bin accessible outside the container and writable for cookie sync
-      - ./data:/app/data:rw
-    restart: unless-stopped
-```
-
-## Python API
+**З Python:**
 
 ```python
-import asyncio
 from gemini_webapi_manager import AccountManager
 
-async def main():
-    async with AccountManager() as mgr:
-        await mgr.login(1)                 # opens a window, waits for you to sign in
-        await mgr.login(2)                 # SlotOccupiedError if slot 2 already has an account
-
-        for acc in mgr.accounts():         # list[Account]
-            print(acc)                     # "#1* me@gmail.com (42%)"
-            print(acc.to_json(indent=2))   # also: acc.to_dict(), Account.list_to_json(...)
-
-        mgr.set_active(2)
-        out = await mgr.generate_content("Hello!")      # uses the active account
-        print(out.text)
-
-        async with mgr.client(1) as client:             # full gemini-webapi API, specific slot
-            chat = client.start_chat()
-            print((await chat.send_message("Hi")).text)
-
-        await mgr.refresh_usage()          # active account; refresh_all_usage() for all
-        mgr.remove(2)                      # frees the slot (must be done before logging in again)
-
-asyncio.run(main())
+async with AccountManager() as mgr:                      # ключ береться з GEMINI_MANAGER_KEY
+    print((await mgr.generate_content("Привіт")).text)
 ```
 
-`Account` (never contains cookies or proxy URLs): `slot`, `is_active`, `email`, `display_name`,
-`usage_percent`, `usage` (tier, 5-hour and weekly windows with reset times, AI credits, per-model
-quotas), `status`, `has_proxy`, `created_at`, `last_used_at`, `last_limit_hit_at`.
-
-Rules worth knowing:
-
-* `login(slot)` fails fast if the slot is occupied: `remove(slot)` first.
-* The first account added becomes active. Removing the active account leaves **no** active account
-  until you choose one, so requests never silently move to a different account.
-* The same Google account cannot be added to two slots (`DuplicateAccountError`).
-* `mgr.generate_content()` follows `set_active()` automatically. Do not keep the object returned by
-  `active_client()` across a switch. Use `mgr.client(slot)` for chats and long-lived work.
-* A rejected session raises `SessionExpiredError`: `remove(slot)`, then `login(slot)` again.
-
-## CLI
+**Шлюз OpenAI API:**
 
 ```bash
-gemini-webapi-manager login 1            # also: --browser chrome|msedge|chromium, --proxy URL
-gemini-webapi-manager list [--json]
-gemini-webapi-manager use 2
-gemini-webapi-manager usage [SLOT]       # refresh from Gemini and show
-gemini-webapi-manager ask "Hello"        # --slot N, --model NAME
-gemini-webapi-manager proxy 1 http://host:port
-gemini-webapi-manager remove 1 [-y]
+gemini-web2api-manager fetch-upstream
+gemini-web2api-manager serve --port 8080 --api-key sk-me
 ```
 
-## Usage numbers
-
-Limits come from `gemini-webapi` itself (`usage_info` / `quotas`): the rolling 5-hour window, the
-weekly window and per-model quotas. `usage_percent` is the highest window. Values are snapshots,
-refreshed whenever a client starts and on `refresh_usage()`, so `list` works offline but may be
-stale. When a request hits the limit, `last_limit_hit_at` is recorded and the client recovers on
-the next call.
-
-## Security model
-
-* Cookies exist unencrypted only in memory. `gemini-webapi` writes a plain-JSON cookie cache; while
-  a managed client runs, that cache is redirected to a private temp directory that is deleted
-  afterwards, and rotated cookies are copied back into the vault. If you export
-  `GEMINI_COOKIE_PATH` yourself, it is respected, and then the plain cache is yours to protect.
-* The vault is written atomically and guarded by a file lock (safe across processes). On POSIX the
-  files are `0600`/`0700`.
-* Login runs in an isolated browser context, so your everyday browser session is untouched.
-* `remove` forgets the session locally only. To revoke it on Google's side, sign out of the device
-  in your Google account security settings.
-* This builds on a reverse-engineered, unofficial web client. Use it at your own risk and within
-  Google's terms.
-
-## Layout
-
-```text
-src/gemini_webapi_manager/
-  manager.py   AccountManager (public entry point)
-  client.py    ManagedClient / ManagedChat (transparent wrapper, cookie + usage sync)
-  login.py     Playwright login flow
-  storage.py   encrypted, locked, atomic vault     crypto.py  scrypt + AES-GCM
-  models.py    Account (public) / StoredAccount     usage.py   usage snapshots
-  cache.py     private cookie-cache sandbox         cli.py     command line
-tests/         offline tests (fake GeminiClient / fake browser)
+```python
+from openai import OpenAI
+client = OpenAI(base_url="http://127.0.0.1:8080/v1", api_key="sk-me")
+print(client.chat.completions.create(model="gemini-3.6-flash", messages=[{"role": "user", "content": "Привіт"}]))
 ```
+
+## Документація
+
+- [`gemini-vault`](packages/gemini-vault/README.md) — сховище, слоти, ключ, CLI, вхід, API, помилки;
+  [вхід з консолі: сценарії та діагностика](docs/console-login.md)
+- [`gemini-webapi-manager`](packages/gemini-webapi-manager/README.md) — `AccountManager`, CLI, сумісність
+- [`gemini-web2api-manager`](packages/gemini-web2api-manager/README.md) — шлюз, конфіг, правила перемикання, адмін-ендпоінти
+- [`deploy/`](deploy/README.md) — Docker, systemd, експлуатація сховища на сервері
+- [`example/`](example) — інтерактивний консольний приклад
+
+## Безпека й обмеження
+
+- Ключ `GEMINI_MANAGER_KEY` відкриває весь `vault.bin`. Не додавайте `.env` і `vault.bin` до git (див. `.gitignore`).
+- Пароль і коди підтвердження не зберігаються й не потрапляють у журнали.
+- Шлюз не слід відкривати назовні без `api_keys`.
+- Google може відхилити автоматизований вхід (CAPTCHA, «цей браузер може бути небезпечним»), особливо з IP дата-центру.
+  Тоді увійдіть на звичайному комп'ютері й перенесіть `vault.bin` на сервер.
+- Це неофіційні клієнти веб-версії Gemini; їх використання може суперечити умовам Google. Краще користуватися
+  окремим тестовим акаунтом.
+
+## Розробка
+
+```bash
+pip install -e "packages/gemini-vault[dev]" -e packages/gemini-webapi-manager -e packages/gemini-web2api-manager httpx
+gemini-web2api-manager fetch-upstream
+GEMINI_VAULT_BROWSER_PATH=/path/to/chromium python -m pytest -q   # без змінної браузерні тести пропускаються
+```
+
+Ліцензія — [MIT](LICENSE).

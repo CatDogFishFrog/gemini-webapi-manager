@@ -48,7 +48,7 @@ class Settings:
         if not resolved_key:
             raise MissingKeyError(
                 f"Encryption key not set. Export {ENV_KEY} (generate one with "
-                "`gemini-webapi-manager keygen`) or pass key=... explicitly."
+                "`gemini-vault keygen`) or pass key=... explicitly."
             )
         if len(resolved_key) < MIN_KEY_LENGTH:
             raise WeakKeyError(f"Encryption key must be at least {MIN_KEY_LENGTH} characters.")

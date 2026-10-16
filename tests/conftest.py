@@ -6,8 +6,8 @@ from types import SimpleNamespace
 import pytest
 from gemini_webapi import UsageLimitExceededError
 
-import gemini_webapi_manager.client as client_mod
-import gemini_webapi_manager.manager as manager_mod
+import gemini_vault.sessions as client_mod
+import gemini_vault.registry as manager_mod
 from gemini_webapi_manager import AccountManager
 from gemini_webapi_manager.login import LoginResult
 
@@ -40,6 +40,8 @@ class FakeGemini:
             "ai_credits_remaining": None,
         }
         self.quotas = {}
+        self.access_token = f"at-{secure_1psid}"
+        self.build_label = "boq_test"
         self.init_calls = 0
         self.closed = False
         self.limit_next = False

@@ -1,15 +1,28 @@
 __pycache__/
+*.py[cod]
 *.egg-info/
 .pytest_cache/
+.venv*/
 build/
 dist/
-.venv/
+
+# локальна службова тека (пам'ять, плани) — не входить до репозиторію
+.agents
+
+# секрети та дані (ніколи не комітити)
 .env
 .env.*
 !.env.example
-vault.bin
+*.bin
+vault/
 vault.lock
 .server-config.json
-scripts/*
-!scripts/manage-vault.ps1
-.agents
+gateway.config.json
+gemini-login-debug/
+live-smoke-report/
+
+# дані скриптів лишаються локально
+scripts/.env
+scripts/vault/
+scripts/.venv-*/
+scripts/gemini-webapi-manager/

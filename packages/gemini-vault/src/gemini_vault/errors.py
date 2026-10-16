@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 class GeminiManagerError(Exception):
-    """Base class for all errors raised by gemini-webapi-manager."""
+    """Base class for all errors raised by gemini-vault."""
 
 
 class ConfigError(GeminiManagerError):
@@ -73,6 +73,26 @@ class LoginError(GeminiManagerError):
 
 class LoginTimeoutError(LoginError):
     """The user did not finish signing in before the timeout."""
+
+
+class LoginAbortedError(LoginError):
+    """The user cancelled the sign-in (Ctrl+C, empty answer, or chose to abort)."""
+
+
+class LoginBlockedError(LoginError):
+    """Google refused the sign-in (``/signin/rejected``, "this browser may not be secure", ...)."""
+
+
+class LoginChallengeError(LoginError):
+    """The console login met a page it cannot drive (unknown challenge, unsupported step).
+
+    ``debug_dir`` (if set) holds a screenshot and a sanitised page description that can be
+    handed to a developer / AI agent to teach the flow the new step.
+    """
+
+    def __init__(self, message: str, debug_dir: str | None = None) -> None:
+        self.debug_dir = debug_dir
+        super().__init__(message)
 
 
 class SessionExpiredError(GeminiManagerError):

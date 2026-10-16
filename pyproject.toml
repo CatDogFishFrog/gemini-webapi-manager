@@ -1,0 +1,5 @@
+# Корінь монорепозиторію: лише конфігурація тестів. Кожен пакет збирається зі своєї теки packages/<name>.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+markers = ["browser: потрібен справжній Chromium (GEMINI_VAULT_BROWSER_PATH)"]

@@ -1,0 +1,21 @@
+name: tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ matrix.python }}" }
+      - name: Install
+        run: |
+          pip install -e "packages/gemini-vault[dev]" -e packages/gemini-webapi-manager -e packages/gemini-web2api-manager httpx
+          python -m playwright install --with-deps chromium
+          gemini-web2api-manager fetch-upstream
+      - name: Tests (з браузерними сценаріями консольного логіну)
+        run: |
+          export GEMINI_VAULT_BROWSER_PATH=$(python -c "from playwright.sync_api import sync_playwright as s; p=s().start(); print(p.chromium.executable_path); p.stop()")
+          python -m pytest -q

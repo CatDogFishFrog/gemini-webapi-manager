@@ -61,7 +61,7 @@ class VaultCipher:
 
     def decrypt(self, blob: bytes) -> bytes:
         if len(blob) < _HEADER_LEN + _NONCE_LEN + 16 or not blob.startswith(_MAGIC):
-            raise VaultCorruptedError("Vault file is not a recognised gemini-webapi-manager vault.")
+            raise VaultCorruptedError("Vault file is not a recognised gemini vault.")
         version = blob[len(_MAGIC)]
         if version != _VERSION:
             raise VaultCorruptedError(f"Unsupported vault version: {version}.")

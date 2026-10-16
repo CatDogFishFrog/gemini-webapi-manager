@@ -1,0 +1,23 @@
+# /etc/systemd/system/gemini-gateway.service  (sudo systemctl enable --now gemini-gateway)
+[Unit]
+Description=Gemini OpenAI-compatible gateway (gemini-web2api-manager)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=gemini
+WorkingDirectory=/opt/gemini-accounts/scripts
+# .env містить GEMINI_MANAGER_KEY (права 600, власник gemini)
+EnvironmentFile=/opt/gemini-accounts/scripts/.env
+Environment=GEMINI_MANAGER_HOME=/opt/gemini-accounts/scripts/vault
+ExecStart=/opt/gemini-accounts/scripts/.venv-gemini-vault/bin/gemini-web2api-manager serve --config /opt/gemini-accounts/scripts/gateway.config.json
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=40
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/gemini-accounts/scripts/vault
+
+[Install]
+WantedBy=multi-user.target

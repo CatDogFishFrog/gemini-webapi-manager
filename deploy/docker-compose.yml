@@ -1,0 +1,16 @@
+# Запуск із теки deploy/:  docker compose up -d --build
+# Перед запуском: scripts/.env (GEMINI_MANAGER_KEY, права 600), scripts/vault/vault.bin,
+# scripts/gateway.config.json (див. gateway.config.example.json) та GATEWAY_UID/GATEWAY_GID — докладно в deploy/README.md.
+services:
+  gemini-gateway:
+    build: { context: .., dockerfile: deploy/Dockerfile }
+    image: gemini-gateway
+    restart: unless-stopped
+    init: true                      # PID 1 передає сигнали й прибирає завершені процеси
+    stop_grace_period: 40s          # час на коректну зупинку
+    user: "${GATEWAY_UID:-1000}:${GATEWAY_GID:-1000}"   # uid:gid власника scripts/vault (id -u; id -g)
+    ports: ["127.0.0.1:8080:8080"]
+    env_file: ../scripts/.env       # GEMINI_MANAGER_KEY
+    volumes:
+      - ../scripts/vault:/data                                   # тека (не файл!) зі vault.bin; шлюз пише в неї
+      - ../scripts/gateway.config.json:/config/gateway.config.json:ro
