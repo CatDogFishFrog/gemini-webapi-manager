@@ -13,8 +13,8 @@ from typing import Any
 _EXCLUDED_QUOTA_KEYS = frozenset({"usage_info", "extra"})
 
 
-def utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+def utcnow_iso(timespec: str = "seconds") -> str:
+    return datetime.now(timezone.utc).isoformat(timespec=timespec)
 
 
 def _num(value: Any) -> float | int | None:

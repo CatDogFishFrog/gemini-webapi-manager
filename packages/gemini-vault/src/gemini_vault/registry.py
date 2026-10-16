@@ -267,7 +267,8 @@ class AccountRegistry:
             stored = StoredAccount(
                 slot=slot,
                 cookies=cookies,
-                created_at=utcnow_iso(),
+                # мікросекунди: заміна акаунта в межах тієї самої секунди теж змінює «ідентичність» запису
+                created_at=utcnow_iso("microseconds"),
                 email=result.email,
                 display_name=result.display_name,
                 proxy=proxy or None,

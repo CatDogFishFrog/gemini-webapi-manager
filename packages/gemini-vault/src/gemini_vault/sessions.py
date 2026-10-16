@@ -173,6 +173,7 @@ class ManagedClient:
         self._cache_held = False
         self._needs_reinit = False
         self._account_created_at: str | None = None
+        self._account_proxy: str | None = None
         self._last_sync = 0.0
         self._last_touch = 0.0
 
@@ -185,6 +186,11 @@ class ManagedClient:
     def account_created_at(self) -> str | None:
         """Identity of the vault record this client was started from."""
         return self._account_created_at
+
+    @property
+    def account_proxy(self) -> str | None:
+        """Proxy the client was started with (to notice that the slot's proxy changed later)."""
+        return self._account_proxy
 
     @property
     def is_running(self) -> bool:
@@ -229,6 +235,7 @@ class ManagedClient:
         reuse = self._client is not None  # re-init the same object so chats stay valid
         account = self._load_account()
         self._account_created_at = account.created_at
+        self._account_proxy = account.proxy
         if not self._cache_held:
             cache.acquire()
             self._cache_held = True

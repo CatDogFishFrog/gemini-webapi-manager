@@ -74,7 +74,8 @@ class SessionKeeper:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._ready = threading.Event()
-        self._wanted: list[int] = []
+        self._wanted: dict[int, tuple[str | None, str | None]] = {}  # слот -> (created_at, проксі) у сховищі
+        self._attempted: dict[int, tuple[str | None, str | None]] = {}  # з чим востаннє пробували відкрити слот
         self._next_scan = 0.0
 
     # ------------------------------------------------------------------ життєвий цикл
@@ -110,27 +111,48 @@ class SessionKeeper:
                 await self._close(slot)
 
     # ------------------------------------------------------------------ цикл
-    def _wanted_slots(self) -> list[int]:
-        slots = [a.slot for a in self._registry.accounts()]
-        return [s for s in slots if self._only is None or s in self._only]
+    def _scan_vault(self) -> dict[int, tuple[str | None, str | None]]:
+        """Слоти, з якими працюємо, й «відбиток» запису: за ним видно, що акаунт замінили або змінили проксі."""
+        accounts = self._registry.store.load().accounts
+        return {
+            slot: (acc.created_at, acc.proxy)
+            for slot, acc in sorted(accounts.items())
+            if self._only is None or slot in self._only
+        }
 
     async def _cycle(self, *, first: bool) -> None:
         if time.monotonic() >= self._next_scan:  # vault читаємо не частіше за раз на 5 с
             try:
-                self._wanted = self._wanted_slots()
+                self._wanted = self._scan_vault()
             except GeminiManagerError as exc:
                 log.error("Cannot read the vault: %s", exc)
                 return
             self._next_scan = time.monotonic() + 5.0
         wanted = self._wanted
-        for slot in list(self._clients):  # слот видалили з vault
-            if slot not in wanted:
+        for slot, client in list(self._clients.items()):
+            fingerprint = wanted.get(slot)
+            if fingerprint is None:  # слот видалили з vault
                 await self._close(slot)
                 self._pool.remove_slot(slot)
+            elif fingerprint != (client.account_created_at, client.account_proxy):
+                # Акаунт у слоті замінили (або змінили проксі): клієнт тримає сесію старого запису,
+                # тому його закривають і відкривають заново. Для заміни акаунта пул теж починає з нуля
+                # (паузи й лічильники належали іншому акаунту).
+                replaced = fingerprint[0] != client.account_created_at
+                log.info("Slot %s: %s; reopening the session", slot, "account replaced" if replaced else "proxy changed")
+                await self._close(slot)
+                if replaced:
+                    self._pool.remove_slot(slot)
+                self._due.pop(slot, None)
+        for slot in list(self._attempted):
+            if slot not in wanted:
+                del self._attempted[slot]
         now = time.monotonic()
         tasks = []
-        for slot in wanted:
+        for slot, fingerprint in wanted.items():
             if slot not in self._clients:
+                if self._attempted.get(slot) not in (None, fingerprint):
+                    self._due[slot] = 0.0  # запис змінився після невдалої спроби: повторюємо одразу
                 if now >= self._due.get(slot, 0.0):
                     tasks.append(self._open(slot))
             elif now >= self._due.get(slot, 0.0):
@@ -140,6 +162,7 @@ class SessionKeeper:
 
     async def _open(self, slot: int) -> None:
         self._due[slot] = time.monotonic() + self._interval  # при збої повторимо через інтервал
+        self._attempted[slot] = self._wanted.get(slot)
         client = ManagedClient(self._registry.store, slot, {"timeout": self._init_timeout})
         try:
             await client.start()
@@ -189,6 +212,11 @@ class SessionKeeper:
         raw = client.raw
         stored = self._registry.store.load().accounts.get(slot)
         if stored is None:
+            return
+        if stored.created_at != client.account_created_at:
+            # Слот замінили між проходами: cookie цього клієнта належать старому акаунту, тож їх не публікуємо;
+            # найближчий прохід побачить заміну й відкриє слот заново.
+            self._next_scan = 0.0
             return
         cookies = dict(stored.cookies)
         cookies.update(cookies_to_dict(raw.cookies))

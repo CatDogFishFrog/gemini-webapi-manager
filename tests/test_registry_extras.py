@@ -136,3 +136,52 @@ def test_keeper_publishes_credentials_follows_vault_changes_and_marks_expired(ma
         assert [a["slot"] for a in pool.status()["accounts"]] == [1]
     finally:
         keeper.stop()
+
+
+def _wait(predicate, timeout: float = 20.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.2)
+    return predicate()
+
+
+def test_keeper_reopens_slot_when_account_is_replaced(manager, login, fake_gemini, monkeypatch):
+    """Повторний вхід у той самий слот: шлюз має працювати з cookie нового акаунта, а не старого."""
+    run(login(1, "a@x.com"))
+    pool = AccountPool()
+    keeper = SessionKeeper(AccountRegistry(home=manager.settings.home, key=KEY), pool, refresh_interval=300)
+    keeper.start(wait=30)
+    try:
+        assert "psid-a@x.com" in pool.acquire().credentials.cookie_header
+        pool.report_success(pool.acquire())  # лічильник запитів належить старому акаунту
+
+        async def fake_login(**kwargs):
+            return LoginResult("b@x.com", "b", {"__Secure-1PSID": "psid-b@x.com", "__Secure-1PSIDTS": "ts-1"})
+
+        monkeypatch.setattr(registry_mod, "browser_login", fake_login)
+        run(manager.login(1, replace=True))
+        assert _wait(lambda: pool.status()["accounts"] and pool.status()["accounts"][0]["email"] == "b@x.com"
+                     and pool.has_usable())
+        lease = pool.acquire()
+        assert "psid-b@x.com" in lease.credentials.cookie_header
+        assert "psid-a@x.com" not in lease.credentials.cookie_header
+        assert lease.credentials.xsrf_token == "at-psid-b@x.com"
+        assert pool.status()["accounts"][0]["requests"] == 0  # статистика старого акаунта не переходить на новий
+    finally:
+        keeper.stop()
+
+
+def test_keeper_reopens_slot_when_proxy_changes(manager, login, fake_gemini):
+    run(login(1, "a@x.com"))
+    pool = AccountPool()
+    keeper = SessionKeeper(AccountRegistry(home=manager.settings.home, key=KEY), pool, refresh_interval=300)
+    keeper.start(wait=30)
+    try:
+        assert pool.acquire().credentials.proxy is None
+        manager.set_proxy(1, "http://p:1")
+        assert _wait(lambda: pool.acquire().credentials.proxy == "http://p:1")
+        assert fake_gemini.instances[-1].proxy == "http://p:1"  # внутрішній клієнт теж відкрито з новим проксі
+    finally:
+        keeper.stop()
