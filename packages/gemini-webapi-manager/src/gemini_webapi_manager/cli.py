@@ -18,7 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
         "gemini-webapi-manager",
         "Manage Google accounts for gemini-webapi. Needs GEMINI_MANAGER_KEY in the environment.",
     )
-    sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+    sub = parser.subcommands
     ask = sub.add_parser("ask", help="send a prompt using the active (or given) account")
     ask.add_argument("prompt", nargs="+")
     ask.add_argument("--slot", type=int)

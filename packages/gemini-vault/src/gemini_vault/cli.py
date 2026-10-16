@@ -62,6 +62,7 @@ def status_line(message: str) -> None:
 def build_parser(prog: str, description: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=prog, description=description)
     sub = parser.add_subparsers(dest="command", required=True)
+    parser.subcommands = sub  # фронтенди додають свої підкоманди через цей атрибут, а не лізуть у parser._actions
 
     sub.add_parser("keygen", help="print a new random encryption key")
     ib = sub.add_parser("install-browser", help="download Playwright's Chromium")

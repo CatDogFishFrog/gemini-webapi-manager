@@ -27,7 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
         "gemini-web2api-manager",
         "OpenAI-compatible gateway for Gemini with automatic account failover. Needs GEMINI_MANAGER_KEY.",
     )
-    sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+    sub = parser.subcommands
 
     serve = sub.add_parser("serve", help="run the gateway")
     serve.add_argument("--config", help="gemini-web2api config.json (+ optional \"manager\" block)")
