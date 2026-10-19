@@ -8,7 +8,7 @@
 
 - Пакет із extra: `pip install "gemini-vault[login]"`.
 - Chromium: системний Chrome/Chromium (шлях — `--browser-path` або `GEMINI_VAULT_BROWSER_PATH`) або Chromium від
-  Playwright: `gemini-vault install-browser` (на голому сервері — `install-browser --with-deps`, потрібен root).
+  Patchright: `gemini-vault install-browser` (на голому сервері — `install-browser --with-deps`, потрібен root).
   Під root Chromium запускається з `--no-sandbox`.
 - Ключ `GEMINI_MANAGER_KEY`.
 
@@ -48,7 +48,7 @@
 | `LoginAbortedError` | скасовано (`Ctrl+C`, `q`, порожня відповідь) |
 | `SlotOccupiedError` | слот зайнятий: `remove` або `--replace` |
 | `DuplicateAccountError` | цей e-mail уже підключено в іншому слоті |
-| `Playwright is not installed` | `pip install "gemini-vault[login]"` |
+| `Patchright is not installed` | `pip install "gemini-vault[login]"` |
 | `Could not start the browser` | перевірте `GEMINI_VAULT_BROWSER_PATH` або `install-browser` |
 
 CAPTCHA й антифрод Google програма не обходить: CAPTCHA розв'язує людина.

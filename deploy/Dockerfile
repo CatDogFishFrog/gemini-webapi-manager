@@ -30,7 +30,7 @@ CMD ["gemini-web2api-manager", "serve", "--host", "0.0.0.0", "--port", "8080"]
 
 FROM gateway AS admin
 USER root
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw GEMINI_VAULT_NO_SANDBOX=1
+ENV PATCHRIGHT_BROWSERS_PATH=/opt/pw GEMINI_VAULT_NO_SANDBOX=1
 RUN pip install --no-cache-dir "/app/packages/gemini-vault[login]" \
  && gemini-vault install-browser --with-deps \
  && chmod -R a+rX /opt/pw \

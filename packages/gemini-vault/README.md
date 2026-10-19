@@ -11,8 +11,8 @@
 pip install "gemini-vault[login] @ git+https://github.com/CatDogFishFrog/gemini-webapi-manager.git#subdirectory=packages/gemini-vault"
 ```
 
-Python 3.11+. Залежності: `gemini-webapi>=2.1.1,<3`, `cryptography`, `filelock`. Extra `[login]` додає Playwright;
-він потрібен лише на машині, де виконується вхід. Серверу з готовим `vault.bin` Playwright не потрібен.
+Python 3.11+. Залежності: `gemini-webapi>=2.1.1,<3`, `cryptography`, `filelock`. Extra `[login]` додає Patchright;
+він потрібен лише на машині, де виконується вхід. Серверу з готовим `vault.bin` Patchright не потрібен.
 
 ## Концепції
 
@@ -57,7 +57,7 @@ gemini-vault proxy 1 http://user:pass@host:3128  # проксі слота; бе
 gemini-vault remove 1 [-y] [--revoke]            # видалити; --revoke ще й виходить з акаунта на боці Google
 gemini-vault rekey --generate                    # перешифрувати vault.bin новим ключем (друкує його в stdout)
 gemini-vault rekey --new-key-env VAR|--new-key-file FILE   # власний новий ключ; без параметрів — запит у терміналі
-gemini-vault install-browser [--with-deps]       # Chromium від Playwright
+gemini-vault install-browser [--with-deps]       # Chromium від Patchright
 gemini-vault doctor                              # перевірка середовища
 ```
 
@@ -79,7 +79,7 @@ gemini-vault doctor                              # перевірка серед
 | --- | --- | --- |
 | Де | машина з екраном | будь-яка, зокрема сервер без графічної оболонки |
 | Як | відкривається браузер, користувач входить сам, програма чекає (до 300 с) | headless-браузер; програма питає в терміналі пароль, метод підтвердження, коди (до 900 с бездіяльності) |
-| Браузер | системні Chrome/Edge за замовчуванням | Chromium: системний або від Playwright |
+| Браузер | системні Chrome/Edge за замовчуванням | Chromium: системний або від Patchright |
 
 Докладно про консольний вхід, його кроки та діагностику — [docs/console-login.md](../../docs/console-login.md).
 

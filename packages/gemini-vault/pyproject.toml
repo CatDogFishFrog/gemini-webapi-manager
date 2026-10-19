@@ -17,8 +17,8 @@ dependencies = [
 
 [project.optional-dependencies]
 # Потрібен лише там, де відбувається вхід (вікно або консоль). Серверу з готовим vault.bin — не потрібен.
-login = ["playwright>=1.51"]
-dev = ["pytest>=8", "playwright>=1.51"]
+login = ["patchright>=1.50"]
+dev = ["pytest>=8", "patchright>=1.50"]
 
 [project.scripts]
 gemini-vault = "gemini_vault.cli:main"
@@ -31,4 +31,4 @@ gemini_vault = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["browser: needs a real Chromium (set GEMINI_VAULT_BROWSER_PATH or run `playwright install chromium`)"]
+markers = ["browser: needs a real Chromium (set GEMINI_VAULT_BROWSER_PATH or run `patchright install chromium`)"]

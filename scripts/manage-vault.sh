@@ -13,7 +13,7 @@
 #   GVM_VENV        тека віртуального середовища   (типово: <скрипт>/.venv-gemini-vault)
 #   GVM_VAULT_DIR   тека зі сховищем vault.bin     (типово: <скрипт>/vault)
 #   GVM_PYTHON      інтерпретатор Python >= 3.11   (типово: python3)
-#   GEMINI_VAULT_BROWSER_PATH  шлях до Chromium/Chrome (якщо не ставити браузер Playwright)
+#   GEMINI_VAULT_BROWSER_PATH  шлях до Chromium/Chrome (якщо не ставити браузер Patchright)
 # =============================================================================
 set -u
 
@@ -159,7 +159,7 @@ act_login_console() {
     [ -n "$proxy" ] && args+=(--proxy "$proxy")
     if [ -z "${GEMINI_VAULT_BROWSER_PATH:-}" ] && ! command -v chromium >/dev/null 2>&1 \
        && ! command -v google-chrome >/dev/null 2>&1 && ! command -v chromium-browser >/dev/null 2>&1; then
-        warn "Системного Chrome/Chromium не знайдено. Потрібен браузер Playwright (пункт 10 меню)."
+        warn "Системного Chrome/Chromium не знайдено. Потрібен браузер Patchright (пункт 10 меню)."
     fi
     if confirm "Замінити акаунт, якщо слот зайнятий (зберігає проксі й статус активного)?"; then args+=(--replace); fi
     if confirm "Зберігати діагностику кроків (знімки + опис сторінок) у ./gemini-login-debug?"; then
@@ -269,8 +269,8 @@ act_gateway() {
 act_install_browser() {
     header "БРАУЗЕР ДЛЯ ВХОДУ"
     echo "Варіанти: (a) системний Chromium/Chrome (задайте GEMINI_VAULT_BROWSER_PATH),"
-    echo "          (b) Chromium від Playwright (~150 МБ) разом із системними бібліотеками (потрібен root/sudo)."
-    if confirm "Встановити Chromium Playwright разом із залежностями (--with-deps)?"; then
+    echo "          (b) Chromium від Patchright (~150 МБ) разом із системними бібліотеками (потрібен root/sudo)."
+    if confirm "Встановити Chromium Patchright разом із залежностями (--with-deps)?"; then
         if [ "$(id -u)" -eq 0 ]; then cli install-browser --with-deps
         else sudo -E env "PATH=$PATH" "$(venv_python)" -m gemini_vault install-browser --with-deps; fi
     elif confirm "Лише завантажити Chromium без системних бібліотек?"; then

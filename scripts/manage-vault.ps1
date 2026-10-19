@@ -263,7 +263,7 @@ function Add-Account {
     Write-Host "1. auto (Спробувати системний Chrome, потім Edge, потім Chromium)"
     Write-Host "2. chrome (Рекомендовано - Google Chrome)"
     Write-Host "3. msedge (Microsoft Edge)"
-    Write-Host "4. chromium (Playwright Chromium)"
+    Write-Host "4. chromium (Patchright Chromium)"
     $bChoice = Read-Host "Вибір [1-4, за замовчуванням 2]"
     
     $browser = "chrome"
@@ -274,12 +274,12 @@ function Add-Account {
         "4" { $browser = "chromium" }
     }
 
-    # Якщо обрано chromium або auto, перевіряємо чи потрібен Playwright Chromium
+    # Якщо обрано chromium або auto, перевіряємо чи потрібен Patchright Chromium
     if ($browser -eq "chromium") {
-        Write-Warn "Для використання вбудованого Chromium потрібні бінарні файли Playwright (~150-200 МБ)."
-        $confirm = Read-Host "Завантажити/оновити браузер Playwright зараз? [y/N]"
+        Write-Warn "Для використання вбудованого Chromium потрібні бінарні файли Patchright (~150-200 МБ)."
+        $confirm = Read-Host "Завантажити/оновити браузер Patchright зараз? [y/N]"
         if ($confirm -eq "y" -or $confirm -eq "Y") {
-            Write-Host "Завантаження Playwright Chromium..." -ForegroundColor Cyan
+            Write-Host "Завантаження Patchright Chromium..." -ForegroundColor Cyan
             Invoke-ManagerCli @("install-browser")
         }
     }

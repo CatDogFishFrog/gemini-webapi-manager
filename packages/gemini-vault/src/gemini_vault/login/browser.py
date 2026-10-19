@@ -20,9 +20,10 @@ from .common import (
     LoginResult,
     LoginTarget,
     capture_session,
-    import_playwright,
+    import_patchright,
     launch_browser,
 )
+from .fingerprint import generate_fingerprint
 
 
 async def browser_login(
@@ -36,34 +37,35 @@ async def browser_login(
     target: LoginTarget = DEFAULT_TARGET,
 ) -> LoginResult:
     """Open a browser, wait until the user is signed in to Gemini, and return their session."""
-    async_playwright, PlaywrightError = import_playwright()
+    async_patchright, PatchrightError = import_patchright()
     say = on_status or (lambda _message: None)
     deadline = time.monotonic() + timeout
 
-    async with async_playwright() as pw:
+    async with async_patchright() as pw:
         browser_obj = await launch_browser(
-            pw, browser, headless, proxy, PlaywrightError, executable_path=executable_path
+            pw, browser, headless, proxy, PatchrightError, executable_path=executable_path
         )
         try:
-            context = await browser_obj.new_context(viewport={"width": 1100, "height": 820})
+            fingerprint = generate_fingerprint()
+            context = await browser_obj.new_context(**fingerprint.context_options())
             page = await context.new_page()
             try:
                 await page.goto(target.app_url, wait_until="domcontentloaded", timeout=60_000)
-            except PlaywrightError as exc:
+            except PatchrightError as exc:
                 raise LoginError(f"Could not open Gemini: {exc}") from exc
 
             say("Browser opened. Sign in to your Google account in the window...")
-            page = await _wait_for_session(browser_obj, context, deadline, PlaywrightError, target)
+            page = await _wait_for_session(browser_obj, context, deadline, PatchrightError, target)
             say("Signed in. Collecting session data...")
             return await capture_session(
-                context, page, target=target, deadline=deadline, pw_error=PlaywrightError, say=say
+                context, page, target=target, deadline=deadline, pw_error=PatchrightError, say=say
             )
-        except PlaywrightError as exc:
+        except PatchrightError as exc:
             raise LoginError(f"Browser error during login: {exc}") from exc
         finally:
             try:
                 await browser_obj.close()
-            except PlaywrightError:
+            except PatchrightError:
                 pass
 
 

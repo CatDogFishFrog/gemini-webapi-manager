@@ -13,9 +13,9 @@ jobs:
       - name: Install
         run: |
           pip install -e "packages/gemini-vault[dev]" -e packages/gemini-webapi-manager -e packages/gemini-web2api-manager httpx
-          python -m playwright install --with-deps chromium
+          python -m patchright install --with-deps chromium
           gemini-web2api-manager fetch-upstream
       - name: Tests (з браузерними сценаріями консольного логіну)
         run: |
-          export GEMINI_VAULT_BROWSER_PATH=$(python -c "from playwright.sync_api import sync_playwright as s; p=s().start(); print(p.chromium.executable_path); p.stop()")
+          export GEMINI_VAULT_BROWSER_PATH=$(python -c "import patchright.sync_api as s; p=s.sync_playwright().start(); print(p.chromium.executable_path); p.stop()")
           python -m pytest -q

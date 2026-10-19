@@ -32,7 +32,7 @@ pip install "gemini-webapi-manager @ git+$REPO#subdirectory=packages/gemini-weba
 pip install "gemini-web2api-manager @ git+$REPO#subdirectory=packages/gemini-web2api-manager"
 ```
 
-`[login]` додає Playwright — він потрібен лише там, де відбувається вхід. Серверу з готовим `vault.bin` він не потрібен.
+`[login]` додає Patchright — він потрібен лише там, де відбувається вхід. Серверу з готовим `vault.bin` він не потрібен.
 Вимоги: Python 3.11+.
 
 Імпорти `gemini_webapi_manager.*`, що існували до розділення на пакети (`crypto`, `config`, `client`, `login` тощо), працюють

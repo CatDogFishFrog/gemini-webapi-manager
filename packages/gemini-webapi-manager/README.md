@@ -11,7 +11,7 @@ pip install "gemini-webapi-manager @ git+https://github.com/CatDogFishFrog/gemin
 pip install "gemini-webapi-manager[login] @ git+https://github.com/CatDogFishFrog/gemini-webapi-manager.git#subdirectory=packages/gemini-webapi-manager"   # якщо вхід виконується тут
 ```
 
-Пакет залежить від `gemini-vault>=0.2.0,<0.3`. Extra `[login]` додає Playwright для входу.
+Пакет залежить від `gemini-vault>=0.2.0,<0.3`. Extra `[login]` додає Patchright для входу.
 Налаштування сховища (`GEMINI_MANAGER_KEY`, `GEMINI_MANAGER_HOME`, `GEMINI_MANAGER_MAX_SLOTS`) описано в
 [README ядра](../gemini-vault/README.md).
 

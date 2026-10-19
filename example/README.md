@@ -42,9 +42,9 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> **Примітка щодо браузерів:** для первинного входу (Google Login) бібліотека використовує встановлений у системі Google Chrome або Microsoft Edge. Якщо вони відсутні, встановіть Playwright Chromium:
+> **Примітка щодо браузерів:** для первинного входу (Google Login) бібліотека використовує встановлений у системі Google Chrome або Microsoft Edge. Якщо вони відсутні, встановіть Patchright Chromium:
 > ```bash
-> playwright install chromium
+> patchright install chromium
 > ```
 
 ### 3. Налаштування змінних середовища (`.env`)

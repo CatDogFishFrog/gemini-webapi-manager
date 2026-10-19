@@ -65,7 +65,7 @@ def build_parser(prog: str, description: str) -> argparse.ArgumentParser:
     parser.subcommands = sub  # фронтенди додають свої підкоманди через цей атрибут, а не лізуть у parser._actions
 
     sub.add_parser("keygen", help="print a new random encryption key")
-    ib = sub.add_parser("install-browser", help="download Playwright's Chromium")
+    ib = sub.add_parser("install-browser", help="download Patchright's Chromium")
     ib.add_argument("--with-deps", action="store_true",
                     help="also install the system libraries (bare Linux server; needs root)")
 
@@ -225,8 +225,8 @@ def _cmd_doctor() -> int:
     ok = True
     ok_contract, missing = usage_refresh_contract()
     print(f"gemini-webapi usage-refresh contract: {'ok' if ok_contract else 'MISSING ' + ', '.join(missing) + ' (slow fallback is used)'}")
-    has_pw = importlib.util.find_spec("playwright") is not None
-    print(f"playwright (login extra): {'installed' if has_pw else 'NOT installed (pip install gemini-vault[login])'}")
+    has_patchright = importlib.util.find_spec("patchright") is not None
+    print(f"patchright (login extra): {'installed' if has_patchright else 'NOT installed (pip install gemini-vault[login])'}")
     browser = os.environ.get(ENV_BROWSER_PATH) or next(
         (p for p in (shutil.which(n) for n in ("google-chrome", "chromium", "chromium-browser", "microsoft-edge")) if p), None
     )
@@ -250,7 +250,7 @@ def dispatch(args: argparse.Namespace) -> int | None:
         print("Export it as GEMINI_MANAGER_KEY (keep it safe: it opens your vault).", file=sys.stderr)
         return 0
     if args.command == "install-browser":
-        cmd = [sys.executable, "-m", "playwright", "install"]
+        cmd = [sys.executable, "-m", "patchright", "install"]
         if getattr(args, "with_deps", False):
             cmd.append("--with-deps")
         return subprocess.call(cmd + ["chromium"])

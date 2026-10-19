@@ -41,10 +41,12 @@ from .common import (
     LoginResult,
     LoginTarget,
     capture_session,
-    import_playwright,
+    import_patchright,
     launch_browser,
     normalised_user_agent,
 )
+from .fingerprint import generate_fingerprint
+from .human import HumanAgent, human_delay
 from .io import LoginIO, TerminalIO
 
 # --------------------------------------------------------------------------- page observation
@@ -372,6 +374,7 @@ class ConsoleLogin:
         self._email = options.email
         self._failures: dict[Step, int] = {}
         self._unknown = 0
+        self.human = HumanAgent(self.page)
 
     # ----------------------------------------------------------- helpers
     def _touch(self) -> None:
@@ -412,14 +415,13 @@ class ConsoleLogin:
             return self.page.locator(f'[name="{info["name"]}"]:visible').first
         return self.page.locator("input:visible, textarea:visible").first
 
-    async def _type(self, info: dict[str, Any], value: str) -> None:
+    async def _type(self, info: dict[str, Any], value: str, *, is_secret: bool = False) -> None:
         locator = self._input_locator(info)
-        await locator.click()
-        await locator.fill("")
-        await locator.press_sequentially(value, delay=35)
+        await self.human.type_text(locator, value, is_secret=is_secret)
 
     async def _submit(self, obs: Observation, info: dict[str, Any]) -> None:
         """Press the page's own "Next"/"Verify" button, or Enter if there is none."""
+        await human_delay(0.2, 0.45)
         primary = next(
             (b for b in obs.buttons if b.get("id", "").endswith("Next")),
             None,
@@ -430,11 +432,14 @@ class ConsoleLogin:
                 return
             except self.pw_error:
                 pass
-        await self._input_locator(info).press("Enter")
+        locator = self._input_locator(info)
+        await locator.press("Enter")
+        await human_delay(0.2, 0.4)
 
     async def _click_button(self, button: dict[str, Any]) -> None:
         if button.get("id"):
-            await self.page.locator(f'[id="{button["id"]}"]').first.click(timeout=5000)
+            locator = self.page.locator(f'[id="{button["id"]}"]').first
+            await self.human.click_locator(locator, timeout=5000)
             return
         pattern = re.compile(r"^\s*" + re.escape(button["text"]) + r"\s*$", re.I)
         locator = (
@@ -443,12 +448,12 @@ class ConsoleLogin:
             .filter(has_text=pattern)
             .first
         )
-        await locator.click(timeout=5000)
+        await self.human.click_locator(locator, timeout=5000)
 
     async def _click_option(self, index: int, obs: Observation, texts: list[str]) -> None:
         if obs.options:
             locator = self.page.locator(_OPTION_SELECTOR).filter(visible=True).nth(index)
-            await locator.click(timeout=5000)
+            await self.human.click_locator(locator, timeout=5000)
         else:
             button = [b for b in meaningful_buttons(obs) if b["text"] == texts[index]][0]
             await self._click_button(button)
@@ -504,6 +509,7 @@ class ConsoleLogin:
                 Step.REJECTED: self._step_rejected,
                 Step.UNKNOWN: self._step_unknown,
             }[step]
+            await human_delay(0.2, 0.45)
             await handler(obs)
             previous = obs
         raise LoginChallengeError(
@@ -557,7 +563,7 @@ class ConsoleLogin:
             if i.get("type") == "password" or i.get("name", "").lower() == "passwd"
         )
         self.rec.log("typed password [hidden]")
-        await self._type(info, password)
+        await self._type(info, password, is_secret=True)
         await self._submit(obs, info)
         await self.settle(obs)
 
@@ -569,7 +575,8 @@ class ConsoleLogin:
         self._describe(obs)
         label = info.get("label") or info.get("name") or "value"
         hint = " ('!' = another method)" if another_way_button(obs) else ""
-        ask = self.io.ask_secret if _is_secret_input(info) else self.io.ask
+        is_secret = _is_secret_input(info)
+        ask = self.io.ask_secret if is_secret else self.io.ask
         answer = ask(f"{label}{hint}: ")
         self._touch()
         if answer == "!" and another_way_button(obs):
@@ -578,7 +585,7 @@ class ConsoleLogin:
         if not answer:
             raise LoginAbortedError("Nothing entered.")
         self.rec.log("typed verification input [hidden]")
-        await self._type(info, answer)
+        await self._type(info, answer, is_secret=is_secret)
         await self._submit(obs, info)
         await self.settle(obs)
 
@@ -707,44 +714,40 @@ async def console_login(
     without it these files are written (to ``./gemini-login-debug``) only when something
     unexpected happens.
     """
-    async_playwright, PlaywrightError = import_playwright()
+    async_patchright, PatchrightError = import_patchright()
     io = io or TerminalIO()
     say = on_status or (lambda _message: None)
     recorder = DebugRecorder(Path(debug_dir) if debug_dir else None, always=debug_dir is not None)
     options = ConsoleLoginOptions(email=email, idle_timeout=timeout, device_wait=device_wait)
 
-    async with async_playwright() as pw:
+    async with async_patchright() as pw:
         browser_obj = await launch_browser(
-            pw, browser, headless, proxy, PlaywrightError, executable_path=executable_path
+            pw, browser, headless, proxy, PatchrightError, executable_path=executable_path
         )
         try:
-            context = await browser_obj.new_context(
-                viewport={"width": 1280, "height": 900},
-                locale="en-US",
-                user_agent=await normalised_user_agent(browser_obj),
-                extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
-            )
+            fingerprint = generate_fingerprint()
+            context = await browser_obj.new_context(**fingerprint.context_options())
             page = await context.new_page()
             say("Opening Google sign-in in a headless browser...")
             try:
                 await page.goto(target.sign_in_url, wait_until="domcontentloaded", timeout=60_000)
-            except PlaywrightError as exc:
+            except PatchrightError as exc:
                 raise LoginError(f"Could not open the Google sign-in page: {exc}") from exc
 
             flow = ConsoleLogin(
-                page, context, io, target=target, pw_error=PlaywrightError,
+                page, context, io, target=target, pw_error=PatchrightError,
                 recorder=recorder, options=options, say=say,
             )
             await flow.run()
             say("Signed in. Collecting session data...")
             deadline = time.monotonic() + 60.0
             return await capture_session(
-                context, page, target=target, deadline=deadline, pw_error=PlaywrightError, say=say
+                context, page, target=target, deadline=deadline, pw_error=PatchrightError, say=say
             )
-        except PlaywrightError as exc:
+        except PatchrightError as exc:
             raise LoginError(f"Browser error during login: {exc}") from exc
         finally:
             try:
                 await browser_obj.close()
-            except PlaywrightError:
+            except PatchrightError:
                 pass

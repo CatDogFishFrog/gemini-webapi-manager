@@ -88,7 +88,7 @@ def parse_label(label: str | None) -> tuple[str | None, str | None]:
     )
 
 
-def playwright_proxy(url: str) -> dict[str, str]:
+def browser_proxy(url: str) -> dict[str, str]:
     parsed = urlparse(url)
     server = f"{parsed.scheme}://{parsed.hostname}" + (f":{parsed.port}" if parsed.port else "")
     result = {"server": server}
@@ -99,17 +99,24 @@ def playwright_proxy(url: str) -> dict[str, str]:
     return result
 
 
-def import_playwright() -> tuple[Any, type]:
-    """Import Playwright lazily: it is an optional dependency (``gemini-vault[login]``)."""
+playwright_proxy = browser_proxy  # аліас для сумісності
+
+
+def import_patchright() -> tuple[Any, type]:
+    """Import Patchright (undetected browser engine) lazily: it is an optional dependency (``gemini-vault[login]``)."""
     try:
-        from playwright.async_api import Error as PlaywrightError
-        from playwright.async_api import async_playwright
+        from patchright.async_api import Error as PatchrightError
+        from patchright.async_api import async_playwright
+
+        return async_playwright, PatchrightError
     except ImportError as exc:
         raise LoginError(
-            "Playwright is not installed. Install the login extra: "
+            "Patchright is not installed. Install the login extra: "
             "pip install 'gemini-vault[login]'"
         ) from exc
-    return async_playwright, PlaywrightError
+
+
+import_playwright = import_patchright  # аліас для сумісності
 
 
 def _running_as_root() -> bool:
@@ -151,7 +158,7 @@ async def launch_browser(
 
     channels: list[str | None]
     if browser == "auto":
-        channels = ["chrome", "msedge", None]  # None = Playwright's bundled Chromium
+        channels = ["chrome", "msedge", None]  # None = Patchright's bundled Chromium
     else:
         channels = [None if browser == "chromium" else browser]
 
