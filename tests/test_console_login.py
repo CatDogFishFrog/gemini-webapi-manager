@@ -67,6 +67,28 @@ def test_dump_is_sanitised():
     assert mask_text("x me@host.io y") == "x <email> y"
 
 
+def test_debug_recorder_falls_back_when_dir_not_writable(tmp_path, monkeypatch):
+    from gemini_vault.login.console import DebugRecorder
+    unwritable = tmp_path / "readonly_dir"
+    unwritable.mkdir()
+
+    recorder = DebugRecorder(unwritable / "sub", always=True)
+    monkeypatch.setenv("GEMINI_MANAGER_HOME", str(tmp_path / "home"))
+
+    orig_mkdir = Path.mkdir
+
+    def mock_mkdir(self, *args, **kwargs):
+        if str(self).startswith(str(unwritable)):
+            raise PermissionError("[Errno 13] Permission denied")
+        return orig_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", mock_mkdir)
+
+    target_dir = recorder._ensure()
+    assert target_dir.exists()
+    assert not str(target_dir).startswith(str(unwritable))
+
+
 # ----------------------------------------------------------------------------- браузер
 def _run(io, mock, **kw):
     return asyncio.run(console_login(io, target=mock.target, executable_path=BROWSER, timeout=60,

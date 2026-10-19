@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
+import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -290,29 +292,47 @@ class DebugRecorder:
     def _ensure(self) -> Path:
         if self.directory is None:
             self.directory = Path.cwd() / "gemini-login-debug"
-        self.directory.mkdir(parents=True, exist_ok=True)
+        try:
+            self.directory.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            home = os.environ.get("GEMINI_MANAGER_HOME")
+            if home and Path(home).is_dir():
+                fallback = Path(home) / "gemini-login-debug"
+            else:
+                fallback = Path(tempfile.gettempdir()) / "gemini-login-debug"
+            try:
+                fallback.mkdir(parents=True, exist_ok=True)
+                self.directory = fallback
+            except OSError:
+                pass
         return self.directory
 
     def log(self, line: str) -> None:
         if self.directory is None and not self.always:
             return
-        with (self._ensure() / "transcript.txt").open("a", encoding="utf-8") as handle:
-            handle.write(f"[{time.strftime('%H:%M:%S')}] {mask_text(line)}\n")
+        try:
+            with (self._ensure() / "transcript.txt").open("a", encoding="utf-8") as handle:
+                handle.write(f"[{time.strftime('%H:%M:%S')}] {mask_text(line)}\n")
+        except OSError:
+            pass
 
     async def snapshot(self, page: Any, obs: Observation, label: str, *, force: bool = False) -> Path | None:
         if not (force or self.always):
             return None
-        folder = self._ensure()
-        self._counter += 1
-        stem = folder / f"{self._counter:02d}-{label}"
-        (stem.with_suffix(".json")).write_text(
-            json.dumps(sanitise_observation(obs), ensure_ascii=False, indent=2), encoding="utf-8"
-        )
         try:
-            await page.screenshot(path=str(stem.with_suffix(".png")), full_page=True)
-        except Exception:  # noqa: BLE001 - a missing screenshot must not break the login
-            pass
-        return folder
+            folder = self._ensure()
+            self._counter += 1
+            stem = folder / f"{self._counter:02d}-{label}"
+            (stem.with_suffix(".json")).write_text(
+                json.dumps(sanitise_observation(obs), ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            try:
+                await page.screenshot(path=str(stem.with_suffix(".png")), full_page=True)
+            except Exception:  # noqa: BLE001 - a missing screenshot must not break the login
+                pass
+            return folder
+        except OSError:
+            return None
 
 
 # --------------------------------------------------------------------------- the flow

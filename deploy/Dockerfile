@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir /app/packages/gemini-vault /app/packages/gemini-w
 
 ENV GEMINI_MANAGER_HOME=/data
 VOLUME /data
+WORKDIR /data
 USER gemini
 EXPOSE 8080
 STOPSIGNAL SIGTERM
@@ -34,6 +35,7 @@ RUN pip install --no-cache-dir "/app/packages/gemini-vault[login]" \
  && gemini-vault install-browser --with-deps \
  && chmod -R a+rX /opt/pw \
  && rm -rf /var/lib/apt/lists/*
+WORKDIR /data
 USER gemini
 ENTRYPOINT ["gemini-vault"]
 CMD ["--help"]

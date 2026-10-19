@@ -13,6 +13,7 @@ services:
     env_file: .env             # GEMINI_MANAGER_KEY, GEMINI_GATEWAY_API_KEYS
     ports:
       - "${GATEWAY_BIND:-127.0.0.1}:${GATEWAY_PORT:-8080}:8080"
+    working_dir: /data
     volumes:
       - gemini-data:/data
 
@@ -27,6 +28,7 @@ services:
     stdin_open: true
     tty: true
     shm_size: 1gb              # без цього Chromium у контейнері падає
+    working_dir: /data
     volumes:
       - gemini-data:/data
 
