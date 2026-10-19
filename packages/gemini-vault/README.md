@@ -34,6 +34,7 @@ Python 3.11+. Залежності: `gemini-webapi>=2.1.1,<3`, `cryptography`, `
 | `GEMINI_MANAGER_HOME` | тека зі `vault.bin` | `~/.gemini-webapi-manager` |
 | `GEMINI_MANAGER_MAX_SLOTS` | кількість слотів | `10` |
 | `GEMINI_VAULT_BROWSER_PATH` | шлях до Chromium/Chrome для входу | пошук системного браузера |
+| `GEMINI_VAULT_NO_SANDBOX` | `1` — запускати Chromium з `--no-sandbox` (потрібно в контейнері під звичайним користувачем; від root прапорець додається сам) | — |
 | `GEMINI_VAULT_DEBUG` | `1` — показувати traceback замість короткого повідомлення про помилку | — |
 
 ### Файли й доступ

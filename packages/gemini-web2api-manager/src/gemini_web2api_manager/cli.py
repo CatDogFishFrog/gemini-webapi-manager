@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import signal
 import sys
 import threading
@@ -30,10 +31,14 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.subcommands
 
     serve = sub.add_parser("serve", help="run the gateway")
-    serve.add_argument("--config", help="gemini-web2api config.json (+ optional \"manager\" block)")
+    serve.add_argument("--config", default=os.environ.get(ENV_CONFIG),
+                       help=f"gemini-web2api config.json (+ optional \"manager\" block); default: ${ENV_CONFIG}")
     serve.add_argument("--host")
     serve.add_argument("--port", type=int)
-    serve.add_argument("--api-key", action="append", dest="api_keys", help="accepted Bearer key (repeatable)")
+    serve.add_argument("--api-key", action="append", dest="api_keys",
+                       help=f"accepted Bearer key (repeatable); default: ${ENV_API_KEYS} (comma separated)")
+    serve.add_argument("--allow-empty", action="store_true", default=os.environ.get(ENV_ALLOW_EMPTY) == "1",
+                       help=f"start even with no usable account (503 until one is added); also ${ENV_ALLOW_EMPTY}=1")
     serve.add_argument("--strategy", choices=STRATEGIES, help="sticky (default) or max-remaining")
     serve.add_argument("--slots", help="comma separated slots to use, e.g. 1,2,3 (default: all)")
     serve.add_argument("--no-persist-active", action="store_true", help="do not write the current account into the vault")
@@ -48,9 +53,16 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+ENV_CONFIG = "GEMINI_GATEWAY_CONFIG"
+ENV_API_KEYS = "GEMINI_GATEWAY_API_KEYS"
+ENV_ALLOW_EMPTY = "GEMINI_GATEWAY_ALLOW_EMPTY"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8080
 _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+
+
+def split_keys(value: str | None) -> list[str]:
+    return [k.strip() for k in (value or "").split(",") if k.strip()]
 
 
 def apply_listen_settings(config: dict, cfg: GatewayConfig, args: argparse.Namespace) -> None:
@@ -96,7 +108,10 @@ def install_shutdown_handlers(server) -> "callable":
 
 def _serve(args: argparse.Namespace) -> int:
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(asctime)s %(name)s: %(message)s")
-    cfg = GatewayConfig.load(args.config)
+    try:
+        cfg = GatewayConfig.load(args.config)
+    except OSError as exc:
+        raise GeminiManagerError(f"Cannot read the gateway config {args.config!r}: {exc.strerror or exc}") from exc
     if args.strategy:
         cfg.strategy = args.strategy
     if args.slots:
@@ -108,8 +123,9 @@ def _serve(args: argparse.Namespace) -> int:
     up.config.CONFIG.update(cfg.upstream)
     up.config.CONFIG.update({"cookie_file": None, "xsrf_token": None, "auth_user": None})
     apply_listen_settings(up.config.CONFIG, cfg, args)
-    if args.api_keys:
-        up.config.CONFIG["api_keys"] = args.api_keys
+    api_keys = args.api_keys or split_keys(os.environ.get(ENV_API_KEYS))  # аргумент > змінна > конфіг
+    if api_keys:
+        up.config.CONFIG["api_keys"] = api_keys
 
     registry = AccountRegistry()
     holder: dict[str, SessionKeeper] = {}
@@ -133,7 +149,10 @@ def _serve(args: argparse.Namespace) -> int:
     holder["k"] = keeper
     print("Starting account sessions...", file=sys.stderr)
     keeper.start()
-    if not pool.has_usable():
+    if not pool.has_usable() and args.allow_empty:
+        print("No usable accounts yet: the gateway answers 503 until one is added to the vault "
+              "(it notices new accounts within seconds).", file=sys.stderr)
+    elif not pool.has_usable():
         keeper.stop()
         raise GeminiManagerError(
             "No usable accounts: the vault is empty or every session was rejected. "

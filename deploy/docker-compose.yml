@@ -1,16 +1,34 @@
-# Запуск із теки deploy/:  docker compose up -d --build
-# Перед запуском: scripts/.env (GEMINI_MANAGER_KEY, права 600), scripts/vault/vault.bin,
-# scripts/gateway.config.json (див. gateway.config.example.json) та GATEWAY_UID/GATEWAY_GID — докладно в deploy/README.md.
+# Усе, що потрібно для запуску, лежить у цій теці (deploy/):  cp .env.example .env  &&  docker compose up -d --build
+# Дані (vault.bin) зберігаються в іменованому томі gemini-data, а не в теках хоста. Докладно — README.md.
+name: gemini-gateway
+
 services:
-  gemini-gateway:
-    build: { context: .., dockerfile: deploy/Dockerfile }
-    image: gemini-gateway
+  gateway:
+    build: { context: .., dockerfile: deploy/Dockerfile, target: gateway }
+    image: gemini-gateway:local
+    pull_policy: build
     restart: unless-stopped
-    init: true                      # PID 1 передає сигнали й прибирає завершені процеси
-    stop_grace_period: 40s          # час на коректну зупинку
-    user: "${GATEWAY_UID:-1000}:${GATEWAY_GID:-1000}"   # uid:gid власника scripts/vault (id -u; id -g)
-    ports: ["127.0.0.1:8080:8080"]
-    env_file: ../scripts/.env       # GEMINI_MANAGER_KEY
+    init: true                 # PID 1 передає сигнали й прибирає завершені процеси
+    stop_grace_period: 40s     # час на коректну зупинку (запис cookie)
+    env_file: .env             # GEMINI_MANAGER_KEY, GEMINI_GATEWAY_API_KEYS
+    ports:
+      - "${GATEWAY_BIND:-127.0.0.1}:${GATEWAY_PORT:-8080}:8080"
     volumes:
-      - ../scripts/vault:/data                                   # тека (не файл!) зі vault.bin; шлюз пише в неї
-      - ../scripts/gateway.config.json:/config/gateway.config.json:ro
+      - gemini-data:/data
+
+  # Адміністрування сховища (вхід в акаунти, список, зміна ключа). Окремий образ із браузером збирається лише на вимогу:
+  #   docker compose run --rm vault-admin login-console 1 --email you@gmail.com
+  vault-admin:
+    profiles: ["admin"]
+    build: { context: .., dockerfile: deploy/Dockerfile, target: admin }
+    image: gemini-vault-admin:local
+    pull_policy: build
+    env_file: .env
+    stdin_open: true
+    tty: true
+    shm_size: 1gb              # без цього Chromium у контейнері падає
+    volumes:
+      - gemini-data:/data
+
+volumes:
+  gemini-data:

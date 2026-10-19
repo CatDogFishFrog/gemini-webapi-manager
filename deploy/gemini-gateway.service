@@ -1,4 +1,14 @@
-# /etc/systemd/system/gemini-gateway.service  (sudo systemctl enable --now gemini-gateway)
+# Запуск без Docker. Встановлення (приклад, шляхи можна змінити):
+#   sudo useradd --system --create-home --home-dir /var/lib/gemini-gateway gemini
+#   sudo python3 -m venv /opt/gemini-gateway/venv
+#   sudo /opt/gemini-gateway/venv/bin/pip install ./packages/gemini-vault ./packages/gemini-web2api-manager
+#   sudo -u gemini XDG_CACHE_HOME=/var/lib/gemini-gateway/.cache /opt/gemini-gateway/venv/bin/gemini-web2api-manager fetch-upstream
+#   sudo install -m 600 -o gemini /dev/null /etc/gemini-gateway.env     # і впишіть у нього змінні (див. нижче)
+#   sudo cp deploy/gemini-gateway.service /etc/systemd/system/ && sudo systemctl enable --now gemini-gateway
+#
+# /etc/gemini-gateway.env (права 600, власник gemini):
+#   GEMINI_MANAGER_KEY=...            ключ шифрування vault.bin
+#   GEMINI_GATEWAY_API_KEYS=sk-one    ключі клієнтів шлюзу, через кому
 [Unit]
 Description=Gemini OpenAI-compatible gateway (gemini-web2api-manager)
 After=network-online.target
@@ -6,18 +16,19 @@ Wants=network-online.target
 
 [Service]
 User=gemini
-WorkingDirectory=/opt/gemini-accounts/scripts
-# .env містить GEMINI_MANAGER_KEY (права 600, власник gemini)
-EnvironmentFile=/opt/gemini-accounts/scripts/.env
-Environment=GEMINI_MANAGER_HOME=/opt/gemini-accounts/scripts/vault
-ExecStart=/opt/gemini-accounts/scripts/.venv-gemini-vault/bin/gemini-web2api-manager serve --config /opt/gemini-accounts/scripts/gateway.config.json
+EnvironmentFile=/etc/gemini-gateway.env
+Environment=GEMINI_MANAGER_HOME=/var/lib/gemini-gateway/vault
+Environment=XDG_CACHE_HOME=/var/lib/gemini-gateway/.cache
+Environment=GEMINI_GATEWAY_ALLOW_EMPTY=1
+StateDirectory=gemini-gateway gemini-gateway/vault
+ExecStart=/opt/gemini-gateway/venv/bin/gemini-web2api-manager serve --host 127.0.0.1 --port 8080
 Restart=on-failure
 RestartSec=5
 KillSignal=SIGTERM
 TimeoutStopSec=40
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/opt/gemini-accounts/scripts/vault
+ReadWritePaths=/var/lib/gemini-gateway
 
 [Install]
 WantedBy=multi-user.target

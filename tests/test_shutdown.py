@@ -114,3 +114,70 @@ def test_real_serve_process_stops_cleanly_on_sigterm(tmp_path):
             proc.kill()
     assert proc.returncode == 0, stderr
     assert "Stopped." in stderr
+
+
+def test_real_serve_without_accounts_uses_env_settings(tmp_path):
+    """Контейнерний сценарій: порожнє сховище, ключі й дозвіл на порожній пул — зі змінних середовища."""
+    import socket
+    import subprocess
+    import sys
+    import textwrap
+    import time
+    import urllib.error
+    import urllib.request
+    from pathlib import Path
+
+    from conftest import KEY
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    script = textwrap.dedent(f"""
+        import sys
+        sys.path.insert(0, {str(Path(__file__).parent)!r})
+        from gemini_web2api_manager.cli import main
+        sys.exit(main(["serve", "--port", "{port}"]))
+    """)
+    env = {**os.environ, "GEMINI_MANAGER_KEY": KEY, "GEMINI_MANAGER_HOME": str(tmp_path / "empty"),
+           "GEMINI_GATEWAY_ALLOW_EMPTY": "1", "GEMINI_GATEWAY_API_KEYS": "sk-one, sk-two"}
+    proc = subprocess.Popen([sys.executable, "-c", script], env=env, stderr=subprocess.PIPE, text=True)
+
+    def get(key):
+        request = urllib.request.Request(f"http://127.0.0.1:{port}/_pool/status")
+        if key:
+            request.add_header("Authorization", f"Bearer {key}")
+        return urllib.request.urlopen(request, timeout=2).status
+
+    try:
+        deadline = time.time() + 60
+        while time.time() < deadline and proc.poll() is None:
+            try:
+                assert get("sk-two") == 200  # ключ із змінної GEMINI_GATEWAY_API_KEYS
+                break
+            except OSError:
+                time.sleep(0.3)
+        else:
+            raise AssertionError("шлюз не запустився")
+        with pytest.raises(urllib.error.HTTPError) as denied:
+            get(None)
+        assert denied.value.code in (401, 403)
+        proc.send_signal(signal.SIGTERM)
+        _, stderr = proc.communicate(timeout=60)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    assert proc.returncode == 0, stderr
+    assert "No usable accounts yet" in stderr
+
+
+def test_serve_without_accounts_fails_unless_allowed(tmp_path):
+    import subprocess
+    import sys
+
+    from conftest import KEY
+
+    env = {**os.environ, "GEMINI_MANAGER_KEY": KEY, "GEMINI_MANAGER_HOME": str(tmp_path / "empty")}
+    env.pop("GEMINI_GATEWAY_ALLOW_EMPTY", None)
+    done = subprocess.run([sys.executable, "-m", "gemini_web2api_manager", "serve", "--port", "0"],
+                          env=env, capture_output=True, text=True, timeout=60)
+    assert done.returncode == 1 and "No usable accounts" in done.stderr

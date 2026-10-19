@@ -24,6 +24,7 @@ GOOGLE_SIGN_IN_URL = (
 PSID = "__Secure-1PSID"
 PSIDTS = "__Secure-1PSIDTS"
 
+ENV_NO_SANDBOX = "GEMINI_VAULT_NO_SANDBOX"
 ENV_BROWSER_PATH = "GEMINI_VAULT_BROWSER_PATH"
 
 PSIDTS_GRACE = 20.0
@@ -131,8 +132,9 @@ async def launch_browser(
     executable_path = executable_path or os.environ.get(ENV_BROWSER_PATH) or None
 
     args = ["--disable-blink-features=AutomationControlled"]
-    if _running_as_root():
-        args.append("--no-sandbox")  # Chromium refuses to start as root in a container otherwise
+    if _running_as_root() or os.environ.get(ENV_NO_SANDBOX) == "1":
+        # Chromium не стартує як root у контейнері; в образі admin (звичайний користувач без привілеїв) — теж
+        args.append("--no-sandbox")
     options: dict[str, Any] = {
         "headless": headless,
         "args": args,
