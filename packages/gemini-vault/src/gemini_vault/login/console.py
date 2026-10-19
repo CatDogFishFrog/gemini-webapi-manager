@@ -91,8 +91,11 @@ OBSERVE_JS = r"""
   })).filter(o => o.text);
   const errSel = '[role="alert"], [aria-live="assertive"], [jsname="B34EJ"], .Ekjuhf, .o6cuMc, '
                + '[class*="error" i], [id*="error" i]';
+  // Заголовок сторінки (напр. «Welcome») теж може лежати в aria-live-контейнері — це не помилка.
+  const headings = new Set([...document.querySelectorAll('h1, h2, #headingText, [role="heading"]')]
+    .map(e => text(e).toLowerCase()).filter(Boolean));
   const errors = [...document.querySelectorAll(errSel)].filter(visible).map(text)
-    .filter(t => t && t.length < 300);
+    .filter(t => t && t.length < 300 && !headings.has(t.toLowerCase()));
   const h = document.querySelector('h1, #headingText, [role="heading"]');
   const body = document.body ? document.body.innerText : '';
   const captcha = !!([...document.querySelectorAll('img')].find(
@@ -382,10 +385,11 @@ class ConsoleLogin:
         return latest
 
     def _input_locator(self, info: dict[str, Any]) -> Any:
+        # Google кладе поруч приховане поле з тим самим id (з уже введеним e-mail): беремо лише видиме
         if info.get("id"):
-            return self.page.locator(f'[id="{info["id"]}"]').first
+            return self.page.locator(f'[id="{info["id"]}"]:visible').first
         if info.get("name"):
-            return self.page.locator(f'[name="{info["name"]}"]').first
+            return self.page.locator(f'[name="{info["name"]}"]:visible').first
         return self.page.locator("input:visible, textarea:visible").first
 
     async def _type(self, info: dict[str, Any], value: str) -> None:

@@ -27,7 +27,7 @@ _JS = """
 async function post(url, data){ const r = await fetch(url,{method:'POST',body:JSON.stringify(data)}); return r.json(); }
 function showErr(t){ const e=document.getElementById('err'); e.textContent=t; e.style.display='block'; }
 async function submitField(api, fieldId){
-  const res = await post(api,{value:document.getElementById(fieldId).value});
+  const res = await post(api,{value:[...document.querySelectorAll('[id="'+fieldId+'"]')].find(e=>e.type!=='hidden').value});
   if(res.error) showErr(res.error); else location.href = res.next;
 }
 </script>
@@ -76,11 +76,14 @@ class _Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         s.log.append(f"GET {path}")
         if path in ("/", "/signin"):
-            return self._send(page("Sign in", "<input id='identifierId' name='identifier' type='email' aria-label='Email or phone'>"
+            # як у справжнього Google: перед видимим полем лежить приховане з тим самим id
+            return self._send(page("Sign in", "<input type='hidden' id='identifierId' value=''>"
+                                   "<input id='identifierId' name='identifier' type='email' aria-label='Email or phone'>"
                                    "<button id='identifierNext' onclick=\"submitField('/api/identifier','identifierId')\">Next</button>"
                                    "<a href='/help'>Help</a>"))
         if path == "/signin/challenge/pwd":
-            return self._send(page("Welcome", "<input name='Passwd' type='password' aria-label='Enter your password'>"
+            # заголовок лежить ще й в aria-live-контейнері: це не повідомлення про помилку
+            return self._send(page("Welcome", "<div aria-live='assertive'>Welcome</div><input name='Passwd' type='password' aria-label='Enter your password'>"
                                    "<button id='passwordNext' onclick=\"submitField('/api/password','pw')\">Next</button>"
                                    "<script>document.querySelector('[name=Passwd]').id='pw'</script>"))
         if path == "/signin/challenge/selection":
